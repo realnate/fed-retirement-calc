@@ -27,7 +27,7 @@
   const yesNo = (b) => (b ? 'yes' : 'no');
   const list = (arr) => (arr.length <= 1 ? arr.join('') : arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1]);
   // Accounts as the inputs name them (withdrawal order; conversions and transfers).
-  const ACCOUNT = { brokerage: 'brokerage investments', traditionalTsp: 'traditional TSP', rothTsp: 'Roth TSP', traditionalIra: 'traditional IRA', rothIra: 'Roth IRA' };
+  const ACCOUNT = { brokerage: 'brokerage investments', traditionalWorkplace: 'traditional TSP / 401(k)', rothWorkplace: 'Roth TSP / 401(k)', traditionalIra: 'traditional IRA', rothIra: 'Roth IRA' };
   // "Replace car −$30,000 (today's $) every 6 years from 2052 through 2070" and similar.
   const eventText = (e) => {
     const whose = e.person === 'spouse' ? "your spouse's" : 'your';
@@ -53,8 +53,6 @@
   // Conversions (traditional → Roth, taxed) and transfers (same tax type, not taxed) between accounts.
   const isConv = (w) => /^traditional/.test(w.fromAccount) && /^roth/.test(w.toAccount);
   const moveKey = (w) => `${w.fromAccount}To${w.toAccount[0].toUpperCase()}${w.toAccount.slice(1)}`;
-  const moveText = (w) => `${ACCOUNT[w.fromAccount]} → ${ACCOUNT[w.toAccount]} at ages ${w.fromAge}–${w.throughAge}: ` +
-    (w.howMuch === 'fillBracket' && isConv(w) ? `fill to the top of the ${pct(w.fillToTopOfBracket, 0)} bracket` : w.howMuch === 'wholeBalance' ? 'the whole balance' : `${usd(w.fixedAmount)}/yr (today's $)`);
   // "7% before → 5% after retirement"
   const beforeAfter = (r) => `${pct(r.beforeRetirement)} before → ${pct(r.afterRetirement)} after retirement`;
 
@@ -64,34 +62,56 @@
     const suite = opts.mc && opts.mc.fixed ? opts.mc : null;
     const mcSelKey = res.inputs.household.monteCarloLifespans === 'stochastic' ? 'stochastic' : 'fixed';
     const mcSel = suite ? suite[mcSelKey] : null;
-    const inp = res.inputs, S = res.summary, F = S.fers, Y = res.years;
-    const H = inp.household, E = inp.employment, T = inp.tsp, IR = inp.iras, BR = inp.brokerage;
+    const inp = res.inputs, S = res.summary, Y = res.years;
+    const H = inp.household, EMP = inp.employment, PLN = inp.workplacePlans, IRS = inp.iras, BR = inp.brokerage;
     const CK = inp.checkingAndMoneyMarket.checking, MM = inp.checkingAndMoneyMarket.moneyMarket, WD = inp.withdrawals;
-    const P = inp.fersPension, SU = inp.fersSupplement, SS = inp.socialSecurity, SP = inp.spending, TX = inp.taxes;
+    const FP = inp.fersPension, SS = inp.socialSecurity, SP = inp.spending, TX = inp.taxes;
     const FT = inp.foreignTax, MC = inp.monteCarlo, RUL = MC.adaptiveRules, HC = SP.healthcare, FX = SP.foreignCurrency;
     const moves = TX.conversionsAndTransfers;
     const convW = moves.filter(isConv), xferW = moves.filter((w) => !isConv(w));
-    const iraT = IR.traditional.balance > 0 || moves.some((w) => w.fromAccount === 'traditionalIra' || w.toAccount === 'traditionalIra');
-    const iraR = IR.roth.balance > 0 || IR.roth.contributionsWhileWorking > 0 || moves.some((w) => w.toAccount === 'rothIra');
     const Y0 = H.currentYear, hasSp = H.married;
+    // The people in the plan, how sentences name them, and their workplace plan (the TSP for a federal employee).
+    const WHO = hasSp ? ['you', 'spouse'] : ['you'];
+    const N = (w) => (w === 'you' ? { who: 'you', Who: 'You', your: 'your', Your: 'Your', s: '', label: 'You', they: 'you' }
+      : { who: 'your spouse', Who: 'Your spouse', your: "your spouse's", Your: "Your spouse's", s: 's', label: 'Spouse', they: 'they' });
+    const PS = (w) => S.people[w];
+    const fed = (w) => EMP[w].federal;
+    const feds = WHO.filter(fed);
+    const planName = (w) => (fed(w) ? 'TSP' : '401(k)');
+    const ownerOf = (w) => (w.owner === 'spouse' && hasSp ? 'spouse' : 'you');
+    // A workplace plan or IRA is in use with a balance, contributions, or a conversion or transfer that touches it.
+    const hasPlan = (w) => PLN[w].balances.traditional + PLN[w].balances.roth > 0 || (EMP[w].salary > 0 && PLN[w].contributions.rate > 0);
+    const usesIra = (w, kind) => (kind === 'traditional' ? IRS[w].traditional.balance > 0 : IRS[w].roth.balance > 0 || IRS[w].roth.contributionsWhileWorking > 0) ||
+      moves.some((m) => ownerOf(m) === w && (m.fromAccount === kind + 'Ira' || m.toAccount === kind + 'Ira'));
+    const iraT = WHO.some((w) => usesIra(w, 'traditional')), iraR = WHO.some((w) => usesIra(w, 'roth'));
+    const planUsers = WHO.filter(hasPlan);
+    // "TSP", "401(k)", "TSP and 401(k)" or "TSPs": the household's workplace plans.
+    const plansTxt = planUsers.length === 2 ? (planName('you') === planName('spouse') ? `${planName('you')}s` : `${planName('you')} and ${planName('spouse')}`) : planName(planUsers[0] || 'you');
+    const typeName = (a) => (a === 'traditionalWorkplace' ? `traditional ${plansTxt}` : a === 'rothWorkplace' ? `Roth ${plansTxt}` : ACCOUNT[a]);
+    const acctName = (w, a) => (a === 'traditionalWorkplace' ? `traditional ${planName(w)}` : a === 'rothWorkplace' ? `Roth ${planName(w)}` : ACCOUNT[a]);
+    // "traditional TSP → Roth IRA at ages 62–65: fill to the top of the 22% bracket" (the spouse's rows say so).
+    const moveText = (w) => { const o = ownerOf(w); return `${o === 'spouse' ? 'spouse: ' : ''}${acctName(o, w.fromAccount)} → ${acctName(o, w.toAccount)} at ages ${w.fromAge}–${w.throughAge}: ` +
+      (w.howMuch === 'fillBracket' && isConv(w) ? `fill to the top of the ${pct(w.fillToTopOfBracket, 0)} bracket` : w.howMuch === 'wholeBalance' ? 'the whole balance' : `${usd(w.fixedAmount)}/yr (today's $)`); };
     const row = (y) => Y.find((r) => r.year === y);
     const today = (v, y) => { const r = row(y); return r ? v / r.idx : v; };
+    // "$2,345 in today's dollars ($3,153 in 2038 dollars)"; a year now or past is in today's dollars already.
+    const dual = (v, y, per) => (y > Y0 && row(y) ? `${usd(today(v, y))}${per || ''} in today's dollars (${usd(v)}${per || ''} in ${y} dollars)` : `${usd(v)}${per || ''}`);
     const first = Y[0], last = Y[Y.length - 1];
     const working = Y.filter((r) => r.phase === 'Working');
     const retired = Y.filter((r) => r.phase !== 'Working');
     const sum = (rows, f) => rows.reduce((t, r) => t + f(r), 0);
     const youAgeNow = Y0 - H.you.birthYear, spAgeNow = Y0 - H.spouse.birthYear;
     const hasChk = CK.balance > 0 || CK.keepInChecking > 0;
-    const orderText = WD.order.map((k) => ACCOUNT[k]);
+    const orderText = WD.order.map(typeName);
     const nSettle = Math.round(MM.settlingInYears || 0);
     const settle = MM.keepSurplus && nSettle > 0 && S.retireYear <= S.endYear ? [S.retireYear, Math.min(S.endYear, S.retireYear + nSettle - 1)] : null;
     const settleTxt = settle ? `${settle[0]}${settle[1] > settle[0] ? `–${settle[1]}` : ''}` : '';
-    const typeText = { immediate: 'immediate, unreduced', mra10: 'MRA+10 (reduced, no supplement)', deferred: 'deferred', none: 'no annuity (not vested)' }[F.retirementType];
-    const electionText = { none: 'no survivor annuity', partial: 'partial survivor annuity (−5%, survivor gets 25%)', full: 'full survivor annuity (−10%, survivor gets 50%)' }[F.election];
+    const typeText = (F) => ({ immediate: 'immediate, unreduced', mra10: 'MRA+10 (reduced, no supplement)', deferred: 'deferred', none: 'no annuity (not vested)' }[F.retirementType]);
+    const electionText = (F) => ({ none: 'no survivor annuity', partial: 'partial survivor annuity (−5%, survivor gets 25%)', full: 'full survivor annuity (−10%, survivor gets 50%)' }[F.election]);
     const strategyText = {
       fixedOrder: 'the accounts in a fixed order',
-      proportional: 'the brokerage, TSP and IRA balances in proportion to their size',
-      bracketFill: `traditional TSP and IRA money first, up to the top of the ${pct(WD.fillToTopOfBracket, 0)} bracket each year, then the other accounts in order`,
+      proportional: `the brokerage, ${plansTxt} and IRA balances in proportion to their size`,
+      bracketFill: `traditional ${plansTxt} and IRA money first, up to the top of the ${pct(WD.fillToTopOfBracket, 0)} bracket each year, then the other accounts in order`,
     }[WD.strategy];
     const P1 = S.people.you, P2 = S.people.spouse;
     const tradEnd = last.balTrad + last.ira.trad.bal;
@@ -103,94 +123,129 @@
     story.push(
       `This plan covers ${hasSp ? 'a married couple' : 'a single person'}: you (born ${H.you.birthYear}, age ${youAgeNow} in ${Y0})` +
       (hasSp ? ` and your spouse (born ${H.spouse.birthYear}, age ${spAgeNow})` : '') + `. ` +
-      `It runs from ${Y0} to ${S.endYear} in nominal dollars with ${pct(inp.inflation.rate)} inflation; "today's dollars" means ${Y0} dollars. ` +
+      `It runs from ${Y0} to ${S.endYear} with ${pct(inp.inflation.rate)} inflation. Every input is in today's (${Y0}) dollars; amounts below say whether they are today's dollars or the dollars of a future year (future dollars, after inflation). ` +
       `Assumed lifespans: you through age ${S.youDeathYear - H.you.birthYear} (${S.youDeathYear})` +
       (hasSp ? `, your spouse through age ${S.spouseDeathYear - H.spouse.birthYear} (${S.spouseDeathYear})` : '') + '.' +
       (H.longevityStress ? ' Longevity stress is on: the last survivor is extended to the plan-to age.' : ''));
 
     {
       // Savings today and the returns each account is expected to earn.
-      const held = [
-        [`the TSP ${usd(T.balances.traditional + T.balances.roth)} (traditional ${usd(T.balances.traditional)}, Roth ${usd(T.balances.roth)})`, true],
-        [`a traditional IRA ${usd(IR.traditional.balance)}`, IR.traditional.balance > 0],
-        [`a Roth IRA ${usd(IR.roth.balance)}`, IR.roth.balance > 0],
-        [`brokerage investments ${usd(BR.balance)} (${pct(BR.unrealizedGainShare, 0)} of it unrealized gain)`, BR.balance > 0],
-        [`the money market ${usd(MM.balance)}`, MM.balance > 0],
-        [`checking ${usd(CK.balance)}`, CK.balance > 0],
-      ].filter(([, on]) => on).map(([t]) => t);
-      const total = T.balances.traditional + T.balances.roth + IR.traditional.balance + IR.roth.balance + BR.balance + MM.balance + CK.balance;
-      const rets = [`TSP ${beforeAfter(T.returns)} (one fund allocation for both balances)`];
-      if (iraT) rets.push(`traditional IRA ${beforeAfter(IR.traditional.returns)}`);
-      if (iraR) rets.push(`Roth IRA ${beforeAfter(IR.roth.returns)}`);
+      const held = [], rets = [];
+      let total = BR.balance + MM.balance + CK.balance;
+      for (const w of WHO) {
+        const n = N(w), B = PLN[w].balances, IA = IRS[w];
+        if (hasPlan(w)) {
+          held.push(`${n.your} ${planName(w)} ${usd(B.traditional + B.roth)} (traditional ${usd(B.traditional)}, Roth ${usd(B.roth)})`);
+          rets.push(`${n.your} ${planName(w)} ${beforeAfter(PLN[w].returns)}`);
+        }
+        if (IA.traditional.balance > 0) held.push(`${n.your} traditional IRA ${usd(IA.traditional.balance)}`);
+        if (IA.roth.balance > 0) held.push(`${n.your} Roth IRA ${usd(IA.roth.balance)}`);
+        if (usesIra(w, 'traditional')) rets.push(`${n.your} traditional IRA ${beforeAfter(IA.traditional.returns)}`);
+        if (usesIra(w, 'roth')) rets.push(`${n.your} Roth IRA ${beforeAfter(IA.roth.returns)}`);
+        total += B.traditional + B.roth + IA.traditional.balance + IA.roth.balance;
+      }
+      if (BR.balance > 0) held.push(`brokerage investments ${usd(BR.balance)} (${pct(BR.unrealizedGainShare, 0)} of it unrealized gain)`);
+      if (MM.balance > 0) held.push(`the money market ${usd(MM.balance)}`);
+      if (CK.balance > 0) held.push(`checking ${usd(CK.balance)}`);
       rets.push(`brokerage investments ${beforeAfter(BR.returns)}`);
-      story.push(`Savings today total ${usd(total)}: ${list(held)}. Expected yearly returns: ${list(rets)}` +
+      story.push(`Savings today total ${usd(total)}: ${held.length ? list(held) : 'nothing yet'}. Expected yearly returns: ${list(rets)}` +
         `; the money market yields ${pct(MM.yield, 2)}${hasChk ? ` and checking ${pct(CK.interestRate, 2)}` : ''}.` +
         (MC.enabled ? ' Monte Carlo varies these returns around their expected values (see Monte Carlo).' : ''));
     }
 
-    if (working.length) {
-      const lastW = working[working.length - 1];
-      const iraContrib = sum(working, (r) => r.ira.roth.contrib);
-      const spouseWork = hasSp && E.spouse.hasEarnings && E.spouse.earnings > 0;
-      // ", plus GS step increases from step 5: step 6 in 2027, 7 in 2029 and 8 in 2032"
-      const stepsText = () => {
-        if (!E.addStepIncreases) return '';
-        const st = S.stepIncreases;
-        if (!st.length) return E.currentStep >= 10 ? ', already at GS step 10, the top step' : `; GS step ${E.currentStep}, with no step increase before you retire`;
-        const parts = st.map((x, k) => `${k ? '' : 'step '}${x.step} in ${x.year}`);
-        return `, plus GS step increases from step ${E.currentStep}: ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]}`;
-      };
-      story.push(
-        `You keep working through ${lastW.year}. Salary rises from ${usd(first.salary)} to about ${usd(lastW.salary)} ` +
-        `(${pct(E.annualRaise)} raises a year${stepsText()})` +
-        `${S.payCapFromYear !== null ? `, held at the GS pay cap (Executive Schedule level IV) ${S.payCapFromYear > S.startYear ? `from ${S.payCapFromYear}` : `throughout${S.stepIncreases.length ? ', so the step increases add nothing' : ''}`}` : ''}. ` +
-        `You contribute ${pct(T.contributions.rate)} of pay (${pct(T.contributions.rothShare, 0)} Roth${T.contributions.catchUp ? ', plus catch-ups from 50' : ''}) and the agency adds ` +
-        `${pct(first.contribAgency / first.salary)}. At a ${pct(T.returns.beforeRetirement)} return the TSP grows from ${usd(T.balances.traditional + T.balances.roth)} to ` +
-        `${usd(S.tspAtRetirement)} by the start of ${S.retireYear} (${usd(today(S.tspAtRetirement, S.retireYear))} in today's dollars).` +
-        (iraContrib > 0.5 ? ` You also put ${usd(IR.roth.contributionsWhileWorking)}/yr (today's $, capped at the IRA limit) into the Roth IRA, ${usd(iraContrib)} in all.` : '') +
-        (spouseWork ? ` Your spouse earns ${usd(E.spouse.earnings)}/yr (today's $) until age ${E.spouse.stopsAtAge}.` : '') +
-        ` While working, salary is assumed to cover living costs and taxes${E.extraSavings > 0 ? `; ${usd(E.extraSavings)}/yr (today's $) is saved on top, into the brokerage account` : ''}.` +
-        (() => {
-          const ww = working.filter((r) => r.ssYou + r.ssSpouse + r.pension + r.supplement > 0.5);
-          if (!ww.length) return '';
-          return E.spendBenefitsThatStartBeforeRetiring
-            ? ` Benefits that start before you retire (from ${ww[0].year}, ${usd(sum(ww, (r) => r.coveredIncome))} in total) are assumed to be spent with your salary, not saved.`
-            : ` Benefits that start before you retire (from ${ww[0].year}) are saved, not spent: ${usd(sum(ww, (r) => r.deposit))} in total${MM.keepSurplus ? ', kept in the money market up to the limit' : ''}.`;
-        })());
+    {
+      // Each person's working years: pay, steps and the pay cap, and workplace-plan contributions.
+      const parts = [];
+      for (const w of WHO) {
+        const n = N(w), J = EMP[w], PL = PLN[w], PSw = PS(w);
+        const rowsW = Y.filter((r) => r.per[w] && r.per[w].salary > 0);
+        if (!rowsW.length) continue;
+        const r0 = rowsW[0].per[w], rN = rowsW[rowsW.length - 1];
+        // ", plus GS step increases from step 5: step 6 in 2027, 7 in 2029 and 8 in 2032"
+        const stepsText = () => {
+          if (!fed(w) || !J.addStepIncreases) return '';
+          const st = PSw.stepIncreases;
+          if (!st.length) return J.currentStep >= 10 ? ', already at GS step 10, the top step' : `; GS step ${J.currentStep}, with no step increase before retiring`;
+          const ps = st.map((x, k) => `${k ? '' : 'step '}${x.step} in ${x.year}`);
+          return `, plus GS step increases from step ${J.currentStep}: ${ps.length > 1 ? `${ps.slice(0, -1).join(', ')} and ${ps[ps.length - 1]}` : ps[0]}`;
+        };
+        const cap = fed(w) && PSw.payCapFromYear !== null
+          ? `, held at the GS pay cap (Executive Schedule level IV) ${PSw.payCapFromYear > S.startYear ? `from ${PSw.payCapFromYear}` : `throughout${PSw.stepIncreases.length ? ', so the step increases add nothing' : ''}`}` : '';
+        let t = `${n.Who} keep${n.s} working through ${rN.year}. ${n.Your} salary rises from ${usd(r0.salary)} to about ${usd(rN.per[w].salary)} (${pct(J.annualRaise)} raises a year${stepsText()})${cap}. `;
+        t += PL.contributions.rate > 0 || r0.contribEmployer > 0
+          ? `${n.Who} contribute${n.s} ${pct(PL.contributions.rate)} of pay to the ${planName(w)} (${pct(PL.contributions.rothShare, 0)} Roth${PL.contributions.catchUp ? ', plus catch-ups from 50' : ''}) and ${fed(w) ? 'the agency' : 'the employer'} adds ${pct(r0.contribEmployer / r0.salary)}.`
+          : `${n.Who} make${n.s} no ${planName(w)} contributions.`;
+        const iraContrib = sum(rowsW, (r) => r.per[w].contribRothIra);
+        if (iraContrib > 0.5) t += ` ${n.Who} also put${n.s} ${usd(IRS[w].roth.contributionsWhileWorking)}/yr (today's $, capped at the IRA limit) into a Roth IRA, ${usd(iraContrib)} in all.`;
+        parts.push(t);
+      }
+      if (working.length) {
+        const plansNow = WHO.reduce((t, w) => t + PLN[w].balances.traditional + PLN[w].balances.roth, 0);
+        parts.push(`The ${plansTxt} grow${planUsers.length > 1 || plansTxt.endsWith('s') ? '' : 's'} from ${usd(plansNow)} to ${usd(S.tspAtRetirement)} by the start of ${S.retireYear}, when you retire ` +
+          `(${usd(today(S.tspAtRetirement, S.retireYear))} in today's dollars). While you work, the salaries are assumed to cover living costs and taxes` +
+          `${BR.savingsWhileWorking > 0 ? `; ${usd(BR.savingsWhileWorking)}/yr (today's $) is saved on top, into the brokerage account` : ''}.` +
+          (() => {
+            const ww = working.filter((r) => r.ssYou + r.ssSpouse + r.pension + r.supplement > 0.5);
+            if (!ww.length) return '';
+            return EMP.spendBenefitsThatStartBeforeRetiring
+              ? ` Benefits that start before you retire (from ${ww[0].year}, ${usd(sum(ww, (r) => r.coveredIncome))} in total) are assumed to be spent with the salaries, not saved.`
+              : ` Benefits that start before you retire (from ${ww[0].year}) are saved, not spent: ${usd(sum(ww, (r) => r.deposit))} in total${MM.keepSurplus ? ', kept in the money market up to the limit' : ''}.`;
+          })());
+      }
+      if (parts.length) story.push(parts.join(' '));
     }
 
-    if (F.retirementType === 'none') {
-      story.push(`You separate at ${E.retirementAge} with ${F.service} years of service, which is not enough for a FERS annuity (5 years are required).`);
-    } else {
-      let t = `You retire at the start of ${S.retireYear} at age ${E.retirementAge} with ${F.service} years of service` +
+    // Each person's retirement and annuity: FERS (with the supplement) or another pension.
+    for (const w of WHO) {
+      const n = N(w), J = EMP[w], PSw = PS(w), other = w === 'you' ? 'your spouse' : 'you';
+      const after = J.afterRetiring.earnings > 0 ? ` After retiring ${n.who} earn${n.s} ${usd(J.afterRetiring.earnings)}/yr (today's $) until age ${J.afterRetiring.untilAge}.` : '';
+      if (!fed(w)) {
+        const O = PSw.otherPension, Oin = inp.otherPension[w];
+        let t = PSw.retireYear <= Y0 ? (w === 'you' ? 'You are retired; spending starts now. ' : '')
+          : J.salary > 0 || w === 'you' ? `${n.Who} retire${n.s} at the start of ${PSw.retireYear} at age ${J.retirementAge}${w === 'you' ? '; spending starts then' : ''}. ` : '';
+        if (O.startYear !== null) {
+          t += `${n.Your} pension pays ${dual(O.annualAtStart / 12, O.startYear, '/mo')} from ${O.startYear} (age ${O.startAge})` +
+            `${Oin.cola > 0 ? `, rising ${pct(Oin.cola)} a year` : ', with no COLA'}` +
+            (hasSp ? `; ${O.survivorShare > 0 ? `${pct(O.survivorShare, 0)} of it continues to ${other} after ${w === 'you' ? 'your' : 'their'} death` : `it stops at ${w === 'you' ? 'your' : 'their'} death`}` : '') + '.';
+        }
+        t += after;
+        if (t.trim()) story.push(t.trim());
+        continue;
+      }
+      const F = PSw.fers, P = FP[w], SU = inp.fersSupplement[w];
+      if (F.retirementType === 'none') {
+        story.push(`${n.Who} separate${n.s} at ${J.retirementAge} with ${F.service} years of service, which is not enough for a FERS annuity (5 years are required).`);
+        continue;
+      }
+      const tt = typeText(F);
+      let t = `${n.Who} retire${n.s} at the start of ${PSw.retireYear} at age ${J.retirementAge} with ${F.service} years of service` +
         (P.sickLeaveHours > 0 ? ` (plus ${P.sickLeaveHours} sick-leave hours, giving ${F.compService.toFixed(2)} years for the computation)` : '') +
-        `: ${/^[aeiou]/i.test(typeText) ? 'an' : 'a'} ${typeText} retirement under the ${F.rule} rule (your MRA is ${ym(F.mra)}). `;
-      if (P.useOpmEstimate) t += `The annuity is taken from your OPM estimate: ${usd(F.initialAnnuity / 12)}/mo gross. `;
-      else t += `High-${F.highN} is ${usd(F.high3)}${P.high3Mode === 'auto' ? ' (projected)' : ''}${F.highN === 5 ? ' (High-5 proposal scenario)' : ''}, so the basic annuity is ${F.specialFormula ? '1.7% × 20 yrs + 1% × the rest' : pct(F.multiplier)} × High-${F.highN} × service = ${usd(F.basicAnnuity)}/yr. `;
+        `: ${/^[aeiou]/i.test(tt) ? 'an' : 'a'} ${tt} retirement under the ${F.rule} rule (${n.your} MRA is ${ym(F.mra)}). `;
+      if (P.useOpmEstimate) t += `The annuity is taken from ${n.your} OPM estimate: ${dual(F.initialAnnuity / 12, F.pensionStartYear, '/mo')} gross. `;
+      else t += `High-${F.highN} is ${dual(F.high3, PSw.retireYear)}${P.high3Mode === 'auto' ? ' (projected)' : ''}${F.highN === 5 ? ' (High-5 proposal scenario)' : ''}, so the basic annuity is ${F.specialFormula ? '1.7% × 20 yrs + 1% × the rest' : pct(F.multiplier)} × High-${F.highN} × service = ${dual(F.basicAnnuity, PSw.retireYear, '/yr')}. `;
       if (F.ageReduction > 0) t += `It is permanently reduced ${pct(F.ageReduction)} because it starts at ${F.pensionStartAge}, before 62. `;
-      if (F.pensionStartYear !== S.retireYear && F.pensionStartYear !== null) t += `Payments start in ${F.pensionStartYear} (age ${F.pensionStartAge}). `;
-      t += `With ${electionText}, you receive ${usd(F.initialMonthlyToRetiree)}/mo at the start`;
-      if (F.survivorPct > 0) t += `, and your spouse would receive ${usd(F.initialAnnuity * F.survivorPct / 12)}/mo (plus later COLAs) if you die first`;
-      t += `. ${P.colaMode === 'none' ? 'Scenario: no COLAs on the annuity or survivor annuity.' : `${P.colaMode === 'reduced' ? `Scenario: COLAs are the diet COLA minus ${pct(P.colaReducedBy, 2)} (never below 0); they` : 'Diet COLAs'} ${P.specialCategory ? 'apply right away (special category).' : `begin the year after you turn 62 (${H.you.birthYear + 63}).`}`}`;
-      if (E.afterRetiring.earnings > 0) t += ` After retiring you earn ${usd(E.afterRetiring.earnings)}/yr (today's $) until age ${E.afterRetiring.untilAge}.`;
-      story.push(t);
+      if (F.pensionStartYear !== PSw.retireYear && F.pensionStartYear !== null) t += `Payments start in ${F.pensionStartYear} (age ${F.pensionStartAge}). `;
+      t += `With ${electionText(F)}, ${n.who} receive${n.s} ${dual(F.initialMonthlyToRetiree, F.pensionStartYear, '/mo')} at the start`;
+      if (F.survivorPct > 0) t += `, and ${other} would receive ${usd(today(F.initialAnnuity * F.survivorPct / 12, F.pensionStartYear))}/mo in today's dollars (plus later COLAs) if ${n.who} die${n.s} first`;
+      t += `. ${FP.colaMode === 'none' ? 'Scenario: no COLAs on the annuity or survivor annuity.' : `${FP.colaMode === 'reduced' ? `Scenario: COLAs are the diet COLA minus ${pct(FP.colaReducedBy, 2)} (never below 0); they` : 'Diet COLAs'} ${P.specialCategory ? 'apply right away (special category).' : `begin the year after ${n.who} turn${n.s} 62 (${H[w].birthYear + 63}).`}`}`;
+      story.push(t + after);
       if (F.supplementEligible) {
-        story.push(`The FERS supplement of ${usd(F.supplementMonthly)}/mo (fixed; no COLA) is paid from ${S.retireYear} through ${F.supplementEndYear - 1}. ` +
-          (SU.mode === 'manual' ? 'It is a manual amount.' : `It is estimated as Social Security at 62 from FERS earnings (${usd(F.ss62Today)}/mo in today's $) × ${F.supplementYears} years of service (rounded to the nearest year) ÷ 40.`) +
-          (E.afterRetiring.earnings > 0 ? ' Your post-retirement earnings are subject to its earnings test.' : ''));
+        story.push(`${w === 'you' ? 'The' : "Your spouse's"} FERS supplement of ${usd(today(F.supplementMonthly, PSw.retireYear))}/mo in today's dollars (${usd(F.supplementMonthly)}/mo in ${PSw.retireYear} dollars; fixed, no COLA) is paid from ${PSw.retireYear} through ${F.supplementEndYear - 1}. ` +
+          (SU.mode === 'manual' ? 'It is a manual amount.' : `It is estimated as Social Security at 62 from FERS earnings (${usd(F.ss62Today)}/mo in today's $) × ${F.supplementYears} years of service (rounded to the nearest year) ÷ 40, inflated to ${PSw.retireYear}.`) +
+          (J.afterRetiring.earnings > 0 ? ` ${n.Your} post-retirement earnings are subject to its earnings test.` : ''));
       } else if (SU.mode === 'off') {
-        story.push('The FERS supplement is switched off (a "supplement eliminated" scenario).');
+        story.push(`The FERS supplement is switched off${hasSp ? ` for ${n.who}` : ''} (a "supplement eliminated" scenario).`);
       }
     }
 
     {
       const yr = row(P1.claimYear) || row(P1.claimYear + 1);
       let t = `You claim Social Security at ${ym(P1.claimAge)} in ${P1.claimYear}: ${pct(P1.factor)} of your ${usd(P1.pia)}/mo PIA (today's $), ` +
-        `about ${usd(yr ? yr.ssYou : 0)} in ${yr ? yr.year : P1.claimYear} (nominal; benefits rise with inflation).`;
+        `about ${usd(yr ? yr.ssYou : 0)} in ${yr ? yr.year : P1.claimYear} dollars (benefits rise with inflation).`;
       if (P2) {
         const yr2 = row(P2.claimYear + 1) || row(P2.claimYear);
-        t += ` Your spouse claims at ${ym(P2.claimAge)} in ${P2.claimYear}: ${pct(P2.factor)} of a ${usd(P2.pia)}/mo PIA, about ${usd(yr2 ? yr2.ssSpouse : 0)} in ${yr2 ? yr2.year : P2.claimYear}.`;
-        const sp = Y.reduce((m, r) => m + r.ssSpouseSpousal + r.ssYouSpousal, 0);
+        t += ` Your spouse claims at ${ym(P2.claimAge)} in ${P2.claimYear}: ${pct(P2.factor)} of a ${usd(P2.pia)}/mo PIA (today's $), about ${usd(yr2 ? yr2.ssSpouse : 0)} in ${yr2 ? yr2.year : P2.claimYear} dollars.`;
+        const sp = Y.reduce((m, r) => m + r.ssDetail.spouseSpousal + r.ssDetail.youSpousal, 0);
         t += sp > 0 ? ` Spousal benefits add ${usd(sp)} over the plan.` : ' Neither spouse qualifies for a spousal top-up (each PIA is at least half of the other).';
       }
       const sh = SS.trustFundShortfall;
@@ -210,7 +265,7 @@
       const bridgeRows = Y.filter((r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear);
       if (bridgeRows.length) {
         t += ` During the bridge years ${S.bridgeStartYear}–${S.bridgeEndYear - 1}, before ${hasSp ? 'both Social Security claims' : 'Social Security'} start, ` +
-          (S.bridgePortfolioUsed > 0.5 ? `the portfolio supplies ${usd(S.bridgePortfolioUsed)} net (${usd(S.bridgeTspUsed)} of it from the TSP).` : 'guaranteed income covers spending and taxes, so the portfolio is not drawn.');
+          (S.bridgePortfolioUsed > 0.5 ? `the portfolio supplies ${usd(S.bridgePortfolioUsed)} net (${usd(S.bridgeTspUsed)} of it from the ${plansTxt}).` : 'guaranteed income covers spending and taxes, so the portfolio is not drawn.');
       }
       if (S.peakWithdrawalRate > 0) {
         t += ` The peak core withdrawal rate (recurring spending and taxes only) is ${pct(S.peakCoreWithdrawalRate)}${S.peakCoreWithdrawalYear ? ` (${S.peakCoreWithdrawalYear})` : ''}; ` +
@@ -232,15 +287,21 @@
       ` RMDs come out first each year. When income falls short, the money market is used first, then ${strategyText}` +
       (WD.strategy !== 'proportional' ? ` (${list(orderText)})` : '') + (hasChk ? ', and checking last' : '') + '.' +
       (WD.oneTimeOutflowsFromRothFirst ? ' One-time outflows are paid from the Roth accounts first.' : '') +
-      (S.maxCash > 0.5 ? ` The money market balance peaks at ${usd(S.maxCash)} (nominal${MM.keepSurplus ? '; the limit rises with inflation' : ''}).` : ''));
+      (S.maxCash > 0.5 ? ` The money market balance peaks at ${usd(S.maxCash)} (future dollars${MM.keepSurplus ? '; the limit rises with inflation' : ''}).` : ''));
 
     {
       const rmdRow = row(S.rmdStartYear);
       const fed = S.lifetimeFederalTax, fedRet = S.retirementFederalTax;
       const margins = retired.map((r) => r.marginal);
+      // Each person's RMDs start at their own age; the survivor's age drives an inherited account's.
       let t = rmdRow
-        ? `Required minimum distributions start in ${S.rmdStartYear} at age ${S.rmdStartAge}; the first is ${usd(rmdRow.rmd)} (${usd(rmdRow.startTrad + rmdRow.ira.trad.start)} of traditional TSP${iraT ? ' and IRA' : ''} money ÷ the IRS divisor). `
+        ? `Required minimum distributions start in ${S.rmdStartYear} at age ${S.rmdStartAge}; that year they total ${usd(rmdRow.rmd)} (traditional ${plansTxt}${iraT ? ' and IRA' : ''} balances ÷ the IRS divisor). `
         : `RMDs would start in ${S.rmdStartYear} (age ${S.rmdStartAge}), after the projection ends. `;
+      if (hasSp && P2) {
+        const y2 = H.spouse.birthYear + P2.rmdStartAge, own = Y.find((r) => r.per.spouse && r.per.spouse.rmd > 0);
+        if (own && own.year !== S.rmdStartYear) t += `Your spouse's own RMDs start in ${own.year} (age ${P2.rmdStartAge}). `;
+        else if (!own && y2 <= S.endYear && (PLN.spouse.balances.traditional > 0 || IRS.spouse.traditional.balance > 0)) t += `Your spouse's RMD age is ${P2.rmdStartAge} (${y2}). `;
+      }
       t += `Federal income tax totals ${usd(fed)} (${usd(fedRet)} in retirement), with retirement marginal brackets from ${pct(Math.min(...margins), 0)} to ${pct(Math.max(...margins), 0)}` +
         ` (${TX.mode === 'advanced' ? `2026 brackets and deductions, indexed ${pct(inp.inflation.rate - TX.bracketGrowthBelowInflation, 2)}/yr` : `simple effective rates ${pct(TX.simpleRateJoint)} joint / ${pct(TX.simpleRateSingle)} single`}${TX.stateRate > 0 ? `; state ${pct(TX.stateRate)}` : '; no state tax'}).`;
       if (convW.length) {
@@ -276,8 +337,11 @@
       const after = row(S.firstDeathYear + 1);
       let t = `The first assumed death is ${spouseFirst ? 'your spouse' : 'you'} in ${S.firstDeathYear}. From ${S.firstDeathYear + 1} the survivor files single`;
       if (after) {
-        if (spouseFirst) t += `, your annuity's survivor reduction ends (${usd(after.pension)}/yr), and you receive ${usd(after.ssYou)}/yr of Social Security (the larger of your own or your spouse's benefit)`;
-        else t += `, your spouse receives a survivor annuity of ${usd(after.survivorAnnuity)}/yr and ${usd(after.ssSpouse)}/yr of Social Security (the larger of their own or yours)`;
+        const sv = spouseFirst ? 'you' : 'spouse', ns = N(sv), Fs = PS(sv).fers;
+        if (Fs && Fs.survivorReduction > 0) t += `, ${ns.your} annuity's survivor reduction ends`;
+        t += `, ${ns.who} receive${ns.s} ${usd(after.pension + after.survivorAnnuity)}/yr of annuities` +
+          (after.survivorAnnuity > 0.5 ? ` (${usd(after.survivorAnnuity)} of it a survivor annuity)` : '') +
+          ` and ${usd(spouseFirst ? after.ssYou : after.ssSpouse)}/yr of Social Security (the larger of ${spouseFirst ? "your own or your spouse's" : 'their own or yours'} benefit)`;
         t += `, and spending drops to ${pct(SP.survivorShare, 0)}. Marginal bracket: ${pct(row(S.firstDeathYear).marginal, 0)} the year of death, ${pct(after.marginal, 0)} the next year.`;
       } else t += '.';
       story.push(t);
@@ -287,11 +351,11 @@
       let t = S.depletionYear === null
         ? `The portfolio is never depleted. `
         : `The portfolio runs out in ${S.depletionYear} (your age ${S.depletionAge}); ${usd(S.totalShortfall)} of spending is unfunded through ${S.endYear}. `;
-      const parts = [`traditional TSP ${usd(last.balTrad)}`, `Roth TSP ${usd(last.balRoth)}`].concat(
+      const parts = [`traditional ${plansTxt} ${usd(last.balTrad)}`, `Roth ${plansTxt} ${usd(last.balRoth)}`].concat(
         iraT ? [`traditional IRA ${usd(last.ira.trad.bal)}`] : [], iraR ? [`Roth IRA ${usd(last.ira.roth.bal)}`] : [],
         [`brokerage ${usd(last.balTaxable)}`, `money market ${usd(last.balCash)}`], last.checking.bal > 0.5 ? [`checking ${usd(last.checking.bal)}`] : []);
       t += `At the end of ${S.endYear} it holds ${usd(S.endingBalance)} (${usd(S.endingBalanceReal)} in today's dollars): ${list(parts)}. ` +
-        `After the heirs' ${pct(TX.heirsRate, 0)} tax on the traditional TSP${iraT ? ' and IRA' : ''}, about ${usd(S.afterTaxInheritance)} (${usd(S.afterTaxInheritanceReal)} today's $) is left to heirs (real estate not included).` +
+        `After the heirs' ${pct(TX.heirsRate, 0)} tax on the traditional ${plansTxt}${iraT ? ' and IRA' : ''} money, about ${usd(S.afterTaxInheritance)} (${usd(S.afterTaxInheritanceReal)} today's $) is left to heirs (real estate not included).` +
         (S.lifetimeIrmaa > 0.5 ? ` Medicare IRMAA surcharges add ${usd(S.lifetimeIrmaa)} in Part B premiums.` : '');
       if (suite) {
         const Fx = suite.fixed, St = suite.stochastic;
@@ -321,8 +385,8 @@
     md.push(`Generated ${opts.generatedAt || new Date().toISOString().slice(0, 10)} by a FERS household retirement calculator (an educational model, not advice).`);
 
     h2('Instructions for the reviewer');
-    md.push('You are reviewing a retirement cash-flow projection for a US federal employee under FERS and their household. Act as a skeptical, ' +
-      'fee-only planner who knows FERS, the TSP, IRAs, Social Security, US federal income tax' + (FT.enabled || FX.enabled ? ', and US citizens retiring abroad (cross-border tax)' : '') + '. Please:');
+    md.push(`You are reviewing a retirement cash-flow projection for a household with ${feds.length === 2 ? 'two federal employees' : feds.length ? 'a federal employee' : 'no federal employee'} under FERS. Act as a skeptical, ` +
+      'fee-only planner who knows FERS, the TSP, 401(k)s, IRAs, Social Security, US federal income tax' + (FT.enabled || FX.enabled ? ', and US citizens retiring abroad (cross-border tax)' : '') + '. Please:');
     md.push('1. Check that every input below is plausible and internally consistent, and flag anything that looks wrong or optimistic.');
     md.push('2. Verify the rules applied (see "Rules applied and computed values"): retirement eligibility, annuity formula, survivor election, supplement, Social Security factors, RMDs and taxes. Recompute a few numbers yourself.');
     md.push('3. Spot-check rows of the year-by-year table. Each year, cash sources (income + withdrawals) equal uses (spending + taxes + surplus saved − unfunded), and balances roll forward.');
@@ -330,7 +394,7 @@
     md.push('5. Recommend concrete changes (claiming ages, survivor election, Roth conversions and transfers, withdrawal order, spending, cash buffer) with their trade-offs, and answer the questions at the end.');
     md.push('6. If you recommend changes to the settings, also give the complete edited settings file from "Plan settings (JSON)" at the end, changing only the values you recommend, so it can be imported into the calculator with Import JSON. Its "howToRead" notes explain the units and allowed values.');
     md.push('', 'Conventions: annual steps; age in a year = year − birth year; events take effect at the start of the year the age is reached; ' +
-      `amounts are nominal dollars unless marked "today's $" (${Y0} dollars); the table's inflation index converts nominal to today's dollars (divide by it). ` +
+      `every input is in today's (${Y0}) dollars; results are in future (nominal) dollars, the amounts paid in each year, unless marked "today's $"; the table's inflation index converts them to today's dollars (divide by it). ` +
       'The Inputs headings follow the calculator\'s input panels, and the name in backticks is that panel\'s section in the settings JSON.');
 
     h2('Plan narrative');
@@ -340,12 +404,13 @@
     md.push('| Metric | Value |', '| --- | --- |');
     const retRow = row(S.retireYear);
     const kr = [
-      ['TSP (traditional + Roth) at retirement', `${usd(S.tspAtRetirement)} at start of ${S.retireYear} (${usd(today(S.tspAtRetirement, S.retireYear))} today's $)`],
-      (iraT || iraR) && retRow && ['IRAs at retirement', `traditional ${usd(retRow.ira.trad.start)}, Roth ${usd(retRow.ira.roth.start)} at start of ${S.retireYear}`],
-      ['TSP when RMDs start', S.tspAtRmdStart !== null ? `${usd(S.tspAtRmdStart)} at start of ${S.rmdStartYear}` : '—'],
-      ['FERS annuity to retiree at start', F.retirementType === 'none' ? 'none' : `${usd(F.initialMonthlyToRetiree)}/mo (${F.pensionStartYear})`],
-      ['FERS supplement', F.supplementEligible ? `${usd(F.supplementMonthly)}/mo, ${S.retireYear}–${F.supplementEndYear - 1}` : 'none'],
-      ['Ending balance (left to heirs)', `${usd(S.endingBalance)} nominal / ${usd(S.endingBalanceReal)} today's $ (end of ${S.endYear}); ${usd(tradEnd)} of it is traditional TSP${iraT ? ' and IRA' : ''} money, which is pre-tax to heirs; real estate is not included`],
+      [`${plansTxt} (traditional + Roth) at your retirement`, `${usd(S.tspAtRetirement)} at start of ${S.retireYear} (${usd(today(S.tspAtRetirement, S.retireYear))} today's $)`],
+      (iraT || iraR) && retRow && ['IRAs at your retirement', `traditional ${usd(retRow.ira.trad.start)}, Roth ${usd(retRow.ira.roth.start)} at start of ${S.retireYear}`],
+      [`${plansTxt} when RMDs start`, S.tspAtRmdStart !== null ? `${usd(S.tspAtRmdStart)} at start of ${S.rmdStartYear}` : '—'],
+      ...feds.map((w) => { const F = PS(w).fers; return [`FERS annuity at start${hasSp ? ` (${N(w).who})` : ''}`, F.retirementType === 'none' ? 'none' : `${dual(F.initialMonthlyToRetiree, F.pensionStartYear, '/mo')}, from ${F.pensionStartYear}`]; }),
+      ...feds.map((w) => { const F = PS(w).fers; return [`FERS supplement${hasSp ? ` (${N(w).who})` : ''}`, F.supplementEligible ? `${dual(F.supplementMonthly, PS(w).retireYear, '/mo')}, ${PS(w).retireYear}–${F.supplementEndYear - 1}` : 'none']; }),
+      ...WHO.filter((w) => !fed(w) && PS(w).otherPension.startYear !== null).map((w) => [`Pension (${N(w).who})`, `${dual(PS(w).otherPension.annualAtStart / 12, PS(w).otherPension.startYear, '/mo')} from ${PS(w).otherPension.startYear}`]),
+      ['Ending balance (left to heirs)', `${usd(S.endingBalance)} future $ / ${usd(S.endingBalanceReal)} today's $ (end of ${S.endYear}); ${usd(tradEnd)} of it is traditional ${plansTxt}${iraT ? ' and IRA' : ''} money, which is pre-tax to heirs; real estate is not included`],
       ['Lifetime spending (retired years)', `${usd(S.lifetimeSpending)} recurring (living + healthcare), plus ${usd(S.lifetimeOneTimeOut)} of one-time outflows${S.totalShortfall > 0.5 ? `; ${usd(S.totalShortfall)} unfunded` : ''}`],
       ['Lifetime income taxes', `${usd(S.lifetimeTax)} total = federal ${usd(S.lifetimeFederalTax)} + state ${usd(S.lifetimeStateTax)} + foreign ${usd(S.lifetimeForeignTax)} (includes tax on salary while working)`],
       ['Depletion', S.depletionYear === null ? 'never' : `${S.depletionYear} (age ${S.depletionAge}); unfunded ${usd(S.totalShortfall)}`],
@@ -358,9 +423,9 @@
         (FT.relief === 'usCreditsForeignTax' ? `; US foreign tax credit ${usd(S.lifetimeUsFtc)}; ${usd(S.ftcExpiredTotal)} expired; ${usd(S.ftcCarryforwardEnd)} still carried forward at the end` : '') : 'not modeled (off)'],
       ['Roth conversions', convW.length ? `${usd(S.totalConversions)} (${convW.map(moveText).join('; ')})` : 'none'],
       xferW.length && ['Transfers between accounts', `${usd(sum(Y, (r) => xferW.reduce((a, w) => a + (r.moves[moveKey(w)] || 0), 0)))} (${xferW.map(moveText).join('; ')}); not taxed`],
-      ['After-tax inheritance', `${usd(S.afterTaxInheritance)} nominal / ${usd(S.afterTaxInheritanceReal)} today's $ = Roth ${usd(S.inheritance.roth)} + brokerage ${usd(S.inheritance.taxable)} + money market ${usd(S.inheritance.cash)}${S.inheritance.checking > 0.5 ? ` + checking ${usd(S.inheritance.checking)}` : ''} + traditional ${usd(S.inheritance.trad)} × (1 − ${pct(TX.heirsRate, 0)})`],
+      ['After-tax inheritance', `${usd(S.afterTaxInheritance)} future $ / ${usd(S.afterTaxInheritanceReal)} today's $ = Roth ${usd(S.inheritance.roth)} + brokerage ${usd(S.inheritance.taxable)} + money market ${usd(S.inheritance.cash)}${S.inheritance.checking > 0.5 ? ` + checking ${usd(S.inheritance.checking)}` : ''} + traditional ${usd(S.inheritance.trad)} × (1 − ${pct(TX.heirsRate, 0)})`],
       ['Medicare IRMAA surcharges', S.lifetimeIrmaa > 0.5 ? `${usd(S.lifetimeIrmaa)} of extra Part B premiums` : (HC.medicarePartBYou || HC.medicarePartBSpouse ? 'none' : 'n/a (Part B not enrolled)')],
-      ['Bridge years (retirement → SS)', S.bridgeEndYear > S.bridgeStartYear ? `${S.bridgeStartYear}–${S.bridgeEndYear - 1}: net portfolio draw ${usd(S.bridgePortfolioUsed)}, TSP ${usd(S.bridgeTspUsed)}` : 'none'],
+      ['Bridge years (retirement → SS)', S.bridgeEndYear > S.bridgeStartYear ? `${S.bridgeStartYear}–${S.bridgeEndYear - 1}: net portfolio draw ${usd(S.bridgePortfolioUsed)}, ${plansTxt} ${usd(S.bridgeTspUsed)}` : 'none'],
       ['Monte Carlo success', suite ? `${pct(suite.fixed.successRate, 0)} fixed lifespans / ${pct(suite.stochastic.successRate, 0)} stochastic mortality over ${num(suite.fixed.runs)} runs${opts.mcStale ? ' (stale)' : ''}` : 'not run'],
       ['Monte Carlo shortfall', suite ? `${pct(mcSel.shortfall.anyRate, 1)} of runs have an unfunded year (${mcSelKey} lifespans)` +
         (mcSel.shortfall.totalRealFailing ? `; in those runs the total unfunded is ${usd(mcSel.shortfall.totalRealFailing.p50)} median / ${usd(mcSel.shortfall.totalRealFailing.p90)} 90th percentile (today's $)` : '') : 'not run'],
@@ -379,42 +444,76 @@
     h3('Inflation', 'inflation');
     bullet('Inflation', `${pct(inp.inflation.rate)} a year (healthcare inflation is under Spending; inflation volatility under Monte Carlo)`);
     h3('Employment', 'employment');
-    const nextStep = S.stepIncreases.length ? `next step in ${S.stepIncreases[0].year}` : E.currentStep >= 10 ? 'the top step' : 'no step increase before you retire';
-    bullet('Salary', `${usd(E.salary)}; raises ${pct(E.annualRaise)} a year; ${E.addStepIncreases ? `GS step ${E.currentStep} with step increases (${nextStep})` : 'no step increases'}; retire at ${E.retirementAge}`);
-    bullet('GS pay cap', E.gsPayCap > 0 ? `${usd(E.gsPayCap)} in ${S.startYear}, growing with the raise${S.payCapFromYear !== null ? `; pay is held at it from ${S.payCapFromYear}` : '; pay stays below it'}` : 'none');
-    bullet('Extra savings while working', E.extraSavings > 0 ? `${usd(E.extraSavings)}/yr into the brokerage account` : 'none');
-    bullet('Benefits that start before you retire', E.spendBenefitsThatStartBeforeRetiring ? 'spent with salary (not saved)' : 'saved (salary covers living costs)');
-    bullet('Earnings after retiring', E.afterRetiring.earnings > 0 ? `${usd(E.afterRetiring.earnings)}/yr until age ${E.afterRetiring.untilAge}` : 'none');
-    bullet('Spouse earnings', hasSp && E.spouse.hasEarnings ? `${usd(E.spouse.earnings)}/yr until spouse age ${E.spouse.stopsAtAge}` : 'none');
-    h3('TSP', 'tsp');
-    bullet('Balances', `traditional ${usd(T.balances.traditional)}, Roth ${usd(T.balances.roth)} (${pct(T.balances.rothBasisShare, 0)} of the Roth balance is contributions)`);
-    bullet('Your contributions', `${pct(T.contributions.rate)} of salary, ${pct(T.contributions.rothShare, 0)} Roth; catch-up ${yesNo(T.contributions.catchUp)}; the agency adds 1% + match (to traditional)`);
-    bullet('Returns', `${beforeAfter(T.returns)} (one fund allocation for traditional and Roth); volatility ${pct(MC.volatility.beforeRetirement.tsp)} → ${pct(MC.volatility.afterRetirement.tsp)}`);
+    for (const w of WHO) {
+      const J = EMP[w], PSw = PS(w), n = N(w);
+      const kind = fed(w) ? 'federal employee (FERS)' : 'not a federal employee';
+      if (!(J.salary > 0)) bullet(n.label, `${kind}; not working (salary $0); retirement age ${J.retirementAge}`);
+      else {
+        const nextStep = PSw.stepIncreases.length ? `next step in ${PSw.stepIncreases[0].year}` : J.currentStep >= 10 ? 'the top step' : 'no step increase before retiring';
+        bullet(n.label, `${kind}; salary ${usd(J.salary)} (this year); raises ${pct(J.annualRaise)} a year` +
+          (fed(w) ? `; ${J.addStepIncreases ? `GS step ${J.currentStep} with step increases (${nextStep})` : 'no step increases'}; GS pay cap ` +
+            (J.gsPayCap > 0 ? `${usd(J.gsPayCap)} in ${S.startYear}, growing with the raise${PSw.payCapFromYear !== null ? `; pay is held at it from ${PSw.payCapFromYear}` : '; pay stays below it'}` : 'none') : '') +
+          `; retires at ${J.retirementAge}`);
+      }
+      bullet(`${n.label}: earnings after retiring`, J.afterRetiring.earnings > 0 ? `${usd(J.afterRetiring.earnings)}/yr until age ${J.afterRetiring.untilAge}` : 'none');
+    }
+    bullet('Benefits that start before you retire', EMP.spendBenefitsThatStartBeforeRetiring ? 'spent with the salaries (not saved)' : 'saved (the salaries cover living costs)');
+    h3('Workplace plans (TSP / 401(k))', 'workplacePlans');
+    for (const w of WHO) {
+      const PL = PLN[w], B = PL.balances, Cn = PL.contributions, EC = PL.employerContributions;
+      bullet(`${N(w).label}: ${planName(w)}`, `traditional ${usd(B.traditional)}, Roth ${usd(B.roth)} (${pct(B.rothBasisShare, 0)} of the Roth balance is contributions); ` +
+        `contributions ${pct(Cn.rate)} of salary, ${pct(Cn.rothShare, 0)} Roth; catch-up ${yesNo(Cn.catchUp)}; ` +
+        (fed(w) ? 'the agency adds 1% + match (to traditional)' : `the employer adds ${pct(EC.automatic)} of pay + ${pct(EC.match, 0)} of contributions up to ${pct(EC.matchUpTo)} of pay (to traditional)`) +
+        `; returns ${beforeAfter(PL.returns)} (one fund allocation for traditional and Roth)${hasPlan(w) ? '' : ' (not used)'}`);
+    }
+    bullet('Volatility', `${pct(MC.volatility.beforeRetirement.workplacePlans)} → ${pct(MC.volatility.afterRetirement.workplacePlans)}`);
     h3('IRAs', 'iras');
-    bullet('Traditional IRA', `${usd(IR.traditional.balance)}; returns ${beforeAfter(IR.traditional.returns)}; volatility ${pct(MC.volatility.beforeRetirement.traditionalIra)} → ${pct(MC.volatility.afterRetirement.traditionalIra)}${iraT ? '' : ' (not used)'}`);
-    bullet('Roth IRA', `${usd(IR.roth.balance)} (${pct(IR.roth.basisShare, 0)} contributions and conversions); returns ${beforeAfter(IR.roth.returns)}; volatility ${pct(MC.volatility.beforeRetirement.rothIra)} → ${pct(MC.volatility.afterRetirement.rothIra)}; ` +
-      `contributions while working ${IR.roth.contributionsWhileWorking > 0 ? `${usd(IR.roth.contributionsWhileWorking)}/yr (capped at the IRA limit)` : 'none'}${iraR ? '' : ' (not used)'}`);
+    for (const w of WHO) {
+      const IA = IRS[w], pre = `${N(w).label}: `;
+      bullet(`${pre}traditional IRA`, `${usd(IA.traditional.balance)}; returns ${beforeAfter(IA.traditional.returns)}${usesIra(w, 'traditional') ? '' : ' (not used)'}`);
+      bullet(`${pre}Roth IRA`, `${usd(IA.roth.balance)} (${pct(IA.roth.basisShare, 0)} contributions and conversions); returns ${beforeAfter(IA.roth.returns)}; ` +
+        `contributions while working ${IA.roth.contributionsWhileWorking > 0 ? `${usd(IA.roth.contributionsWhileWorking)}/yr (capped at the IRA limit)` : 'none'}${usesIra(w, 'roth') ? '' : ' (not used)'}`);
+    }
+    bullet('Volatility', `traditional IRA ${pct(MC.volatility.beforeRetirement.traditionalIra)} → ${pct(MC.volatility.afterRetirement.traditionalIra)}, Roth IRA ${pct(MC.volatility.beforeRetirement.rothIra)} → ${pct(MC.volatility.afterRetirement.rothIra)}`);
     h3('Brokerage investments', 'brokerage');
     bullet('Balance', `${usd(BR.balance)} (${pct(BR.unrealizedGainShare, 0)} of it unrealized gain)`);
+    bullet('Savings while you work', BR.savingsWhileWorking > 0 ? `${usd(BR.savingsWhileWorking)}/yr` : 'none');
     bullet('Returns', `${beforeAfter(BR.returns)}; volatility ${pct(MC.volatility.beforeRetirement.brokerage)} → ${pct(MC.volatility.afterRetirement.brokerage)}`);
     h3('Checking & money market', 'checkingAndMoneyMarket');
     bullet('Checking', hasChk ? `${usd(CK.balance)} today; keep ${usd(CK.keepInChecking)} in checking; interest ${pct(CK.interestRate, 2)}` : 'not in the plan ($0 balance, nothing kept)');
     bullet('Money market', `${usd(MM.balance)} today; yield ${pct(MM.yield, 2)}; ` +
       (MM.keepSurplus ? `surplus is kept here up to ${usd(MM.moveToBrokerageAbove)} and the excess moves to brokerage; settling-in years ${nSettle}${settle ? ` (${settleTxt}, no limit)` : ''}` : 'surplus is not kept here (all of it is invested in brokerage)'));
     h3('Withdrawals', 'withdrawals');
-    bullet('Strategy', { fixedOrder: 'fixed order', proportional: 'proportional to the brokerage, TSP and IRA balances', bracketFill: `traditional TSP and IRA first up to the top of the ${pct(WD.fillToTopOfBracket, 0)} bracket, then the order` }[WD.strategy]);
+    bullet('Strategy', { fixedOrder: 'fixed order', proportional: `proportional to the brokerage, ${plansTxt} and IRA balances`, bracketFill: `traditional ${plansTxt} and IRA first up to the top of the ${pct(WD.fillToTopOfBracket, 0)} bracket, then the order` }[WD.strategy]);
     bullet('One-time outflows from Roth accounts first', yesNo(WD.oneTimeOutflowsFromRothFirst));
-    bullet('Order', `money market first, then ${orderText.join(' → ')}${hasChk ? ', checking last' : ''}${WD.strategy === 'proportional' ? ' (not used by the proportional strategy)' : ''}`);
+    bullet('Order', `money market first, then ${orderText.join(' → ')}${hasChk ? ', checking last' : ''}${WD.strategy === 'proportional' ? ' (not used by the proportional strategy)' : ''}` +
+      (hasSp ? '; within a type, the account of a spouse who can withdraw without a penalty first, then the older spouse\'s' : ''));
     bullet('Bridge bucket', WD.bridgeBucket.enabled ? `pre-funds the planned net draws of the first ${WD.bridgeBucket.yearsCovered} retirement years; built ${WD.bridgeBucket.buildYearsBeforeRetirement} years before retirement; fixed ${pct(WD.bridgeBucket.return)} return` : 'off');
     h3('FERS pension', 'fersPension');
-    bullet('Service', `${P.serviceYears} years + ${P.sickLeaveHours} sick-leave hours; FEHB ${P.fehbYearsBeforeRetirement} years before retirement; special category ${yesNo(P.specialCategory)}`);
-    bullet('High-3', `${P.high3Mode === 'auto' ? `auto (${usd(F.high3)} projected)` : `manual ${usd(P.manualHigh3)} (nominal, at retirement)`}; average of the highest ${P.averageSalaryYears} years${P.averageSalaryYears === 5 ? ' (High-5 proposal scenario)' : ' (current law)'}`);
-    bullet('Survivor election', P.survivorElection + (hasSp ? '' : ' (no spouse, so treated as none)'));
-    bullet('COLA', { diet: 'current-law diet COLA', reduced: `diet COLA minus ${pct(P.colaReducedBy, 2)} (scenario)`, none: 'none (scenario)' }[P.colaMode]);
-    bullet('Postpone annuity to age', P.postponeToAge > 0 ? P.postponeToAge : 'no (automatic start)');
-    bullet('OPM estimate', P.useOpmEstimate ? `${usd(P.opmEstimateMonthly)}/mo gross (nominal, first year paid) replaces the computed annuity` : 'not used (computed)');
+    if (!feds.length) bullet('FERS', 'no one in the household is a federal employee');
+    for (const w of feds) {
+      const P = FP[w], F = PS(w).fers, pre = hasSp ? `${N(w).label}: ` : '';
+      bullet(`${pre}service`, `${P.serviceYears} years + ${P.sickLeaveHours} sick-leave hours; FEHB ${P.fehbYearsBeforeRetirement} years before retirement; special category ${yesNo(P.specialCategory)}`);
+      bullet(`${pre}High-${F.highN}`, P.high3Mode === 'auto' ? `auto (${dual(F.high3, PS(w).retireYear)}, projected)` : `manual ${usd(P.manualHigh3)} (today's $)`);
+      bullet(`${pre}survivor election`, P.survivorElection + (hasSp ? '' : ' (no spouse, so treated as none)'));
+      bullet(`${pre}postpone annuity to age`, P.postponeToAge > 0 ? P.postponeToAge : 'no (automatic start)');
+      bullet(`${pre}OPM estimate`, P.useOpmEstimate ? `${usd(P.opmEstimateMonthly)}/mo gross (today's $, inflated to the first year paid) replaces the computed annuity` : 'not used (computed)');
+    }
+    bullet('Average salary used', FP.averageSalaryYears === 5 ? 'highest 5 years (High-5 proposal scenario)' : 'highest 3 years (current law)');
+    bullet('COLA', { diet: 'current-law diet COLA', reduced: `diet COLA minus ${pct(FP.colaReducedBy, 2)} (scenario)`, none: 'none (scenario)' }[FP.colaMode]);
     h3('FERS supplement', 'fersSupplement');
-    bullet('Supplement', SU.mode === 'auto' ? `auto; SS at 62 from FERS earnings ${usd(F.ss62Today)}/mo${SU.ssAt62FromFersMonthly > 0 ? '' : ' (70% of your PIA)'}` : SU.mode === 'manual' ? `manual ${usd(SU.manualMonthly)}/mo (retirement-year dollars)` : 'off (eliminated scenario)');
+    if (!feds.length) bullet('Supplement', 'no one in the household is a federal employee');
+    for (const w of feds) {
+      const SU = inp.fersSupplement[w], F = PS(w).fers;
+      bullet(hasSp ? `${N(w).label}` : 'Supplement', SU.mode === 'auto' ? `auto; SS at 62 from FERS earnings ${usd(F.ss62Today)}/mo${SU.ssAt62FromFersMonthly > 0 ? '' : ` (70% of ${N(w).your} PIA)`}` : SU.mode === 'manual' ? `manual ${usd(SU.manualMonthly)}/mo (today's $, inflated to the retirement year)` : 'off (eliminated scenario)');
+    }
+    h3('Other pension', 'otherPension');
+    const nonFeds = WHO.filter((w) => !fed(w));
+    if (!nonFeds.length) bullet('Other pension', 'not used (everyone is under FERS)');
+    for (const w of nonFeds) {
+      const O = inp.otherPension[w];
+      bullet(N(w).label, O.monthly > 0 ? `${usd(O.monthly)}/mo (today's $) from age ${O.startAge}; COLA ${pct(O.cola)}; survivor keeps ${pct(O.survivorShare, 0)}` : 'none');
+    }
     h3('Social Security', 'socialSecurity');
     bullet('You', `PIA ${usd(SS.you.piaMonthly)}/mo, claim at ${ym(P1.claimAge)}`);
     if (P2) bullet('Spouse', `PIA ${usd(SS.spouse.piaMonthly)}/mo, claim at ${ym(P2.claimAge)}`);
@@ -435,7 +534,7 @@
     bullet('State income tax', TX.stateRate > 0 ? `${pct(TX.stateRate)} flat` : 'none');
     bullet("Heirs' marginal tax rate", `${pct(TX.heirsRate, 0)} (applied to inherited traditional TSP and IRA money)`);
     bullet('Conversions and transfers', moves.length ? moves.map((w) => `${moveText(w)} (${isConv(w) ? 'conversion' : 'transfer'})`).join('; ') +
-      ' (in a year, the first conversion row covering your age applies; every transfer row applies)' : 'none');
+      " (in a year, the first conversion row covering its owner's age applies; every transfer row applies)" : 'none');
     h3('Foreign residence tax', 'foreignTax');
     if (FT.enabled) {
       const A = FT.appliesTo;
@@ -445,12 +544,12 @@
       bullet('Treaty art. 20 (TSP, FERS and supplement US-only)', yesNo(FT.treatyArt20));
       if (FT.method === 'mexicoIsr') bullet('Retirement-income exemption', FT.retirementIncomeExemption ? `on: ${FT.umaMultiple} × UMA (${FT.umaDailyMxn} MXN/day in 2026)` : 'off');
       bullet('Applies to', mxTypes(A).map(([k, l]) => `${l} ${A[k] ? '✓' : '✗'}`).join(', ') +
-        (A.rothWithdrawals ? `; Roth taxed on ${A.rothAmountTaxed === 'earningsShare' ? `the earnings share only (basis = ${pct(T.balances.rothBasisShare, 0)} of today's Roth TSP and ${pct(IR.roth.basisShare, 0)} of today's Roth IRA, plus contributions and conversions)` : `${pct(A.rothTaxedShare, 0)} of each withdrawal`}` : ''));
+        (A.rothWithdrawals ? `; Roth taxed on ${A.rothAmountTaxed === 'earningsShare' ? 'the earnings share only (basis = the contributions share of each Roth balance today, plus later contributions and conversions)' : `${pct(A.rothTaxedShare, 0)} of each withdrawal`}` : ''));
     } else bullet('Foreign tax', 'off');
     h3('Monte Carlo', 'monteCarlo');
     bullet('Runs', `${MC.enabled ? 'on' : 'off'}; ${num(MC.runs)} runs, seed ${MC.seed}`);
     const V = MC.volatility;
-    bullet('Volatility (SD of yearly returns) before → after retirement', `TSP ${pct(V.beforeRetirement.tsp)} → ${pct(V.afterRetirement.tsp)}, brokerage ${pct(V.beforeRetirement.brokerage)} → ${pct(V.afterRetirement.brokerage)}, ` +
+    bullet('Volatility (SD of yearly returns) before → after retirement', `workplace plans ${pct(V.beforeRetirement.workplacePlans)} → ${pct(V.afterRetirement.workplacePlans)}, brokerage ${pct(V.beforeRetirement.brokerage)} → ${pct(V.afterRetirement.brokerage)}, ` +
       `traditional IRA ${pct(V.beforeRetirement.traditionalIra)} → ${pct(V.afterRetirement.traditionalIra)}, Roth IRA ${pct(V.beforeRetirement.rothIra)} → ${pct(V.afterRetirement.rothIra)}`);
     bullet('Inflation', `volatility ${pct(MC.inflation.volatility)}; persistence AR(1) φ = ${MC.inflation.persistence} (the long-run SD stays the volatility)`);
     const ES = RUL.earlySocialSecurity, GR = RUL.spendingGuardrails;
@@ -458,43 +557,56 @@
     bullet('Spending guardrails', GR.enabled ? `on: cut base living spending ${pct(GR.spendingCut, 0)} when the portfolio is below ${pct(GR.cutBelowShareOfPlan, 0)} of plan until above ${pct(GR.restoreAboveShareOfPlan, 0)}; deferrable events slide up to ${GR.deferEventsUpToYears} years (Monte Carlo runs only)` : 'off');
 
     h2('Rules applied and computed values');
-    if (E.addStepIncreases || E.gsPayCap > 0) {
+    const payFeds = feds.filter((w) => EMP[w].salary > 0 && (EMP[w].addStepIncreases || EMP[w].gsPayCap > 0));
+    if (payFeds.length) {
       md.push('### Pay');
-      if (E.addStepIncreases) {
-        bullet('GS step increases', 'after 1 year at steps 1–3, 2 years at steps 4–6 and 3 years at steps 7–9 (5 CFR 531.405); each step adds 1/30 of the step-1 rate, on top of the yearly raise' +
-          (S.stepIncreases.length ? `: ${S.stepIncreases.map((x) => `step ${x.step} in ${x.year}`).join(', ')}` : ''));
-      }
-      if (E.gsPayCap > 0) {
-        bullet('GS pay cap', `pay with locality is held at or below Executive Schedule level IV (5 USC 5304(g)): ${usd(E.gsPayCap)} in ${S.startYear}, ` +
-          `growing with the ${pct(E.annualRaise)} raise because level IV follows the GS across-the-board raise (5 USC 5318)` + (S.payCapFromYear !== null ? `; the cap applies from ${S.payCapFromYear}` : ''));
+      for (const w of payFeds) {
+        const J = EMP[w], PSw = PS(w), pre = hasSp ? `${N(w).label}: ` : '';
+        if (J.addStepIncreases) {
+          bullet(`${pre}GS step increases`, 'after 1 year at steps 1–3, 2 years at steps 4–6 and 3 years at steps 7–9 (5 CFR 531.405); each step adds 1/30 of the step-1 rate, on top of the yearly raise' +
+            (PSw.stepIncreases.length ? `: ${PSw.stepIncreases.map((x) => `step ${x.step} in ${x.year}`).join(', ')}` : ''));
+        }
+        if (J.gsPayCap > 0) {
+          bullet(`${pre}GS pay cap`, `pay with locality is held at or below Executive Schedule level IV (5 USC 5304(g)): ${usd(J.gsPayCap)} in ${S.startYear}, ` +
+            `growing with the ${pct(J.annualRaise)} raise because level IV follows the GS across-the-board raise (5 USC 5318)` + (PSw.payCapFromYear !== null ? `; the cap applies from ${PSw.payCapFromYear}` : ''));
+        }
       }
       md.push('');
     }
-    md.push('### FERS');
-    bullet('Eligibility', `age ${E.retirementAge}, ${F.service} yrs, MRA ${ym(F.mra)} → ${F.rule} (${F.retirementType})`);
-    if (F.retirementType !== 'none' && !P.useOpmEstimate) {
-      bullet('Formula', F.specialFormula
-        ? `(1.7% × min(service, 20) + 1% × rest) × ${usd(F.high3)} = ${usd(F.basicAnnuity)}/yr`
-        : `${pct(F.multiplier)} × ${usd(F.high3)} × ${F.compService.toFixed(2)} yrs = ${usd(F.basicAnnuity)}/yr (1.1% only if 62+ with 20+ yrs at separation)`);
+    for (const w of feds) {
+      const F = PS(w).fers, P = FP[w];
+      md.push(`### FERS${hasSp ? ` (${N(w).who})` : ''}`);
+      bullet('Eligibility', `age ${EMP[w].retirementAge}, ${F.service} yrs, MRA ${ym(F.mra)} → ${F.rule} (${F.retirementType})`);
+      if (F.retirementType !== 'none' && !P.useOpmEstimate) {
+        bullet('Formula', F.specialFormula
+          ? `(1.7% × min(service, 20) + 1% × rest) × ${usd(F.high3)} = ${usd(F.basicAnnuity)}/yr`
+          : `${pct(F.multiplier)} × ${usd(F.high3)} × ${F.compService.toFixed(2)} yrs = ${usd(F.basicAnnuity)}/yr (1.1% only if 62+ with 20+ yrs at separation)`);
+      }
+      bullet('Age reduction', F.ageReduction > 0 ? `${pct(F.ageReduction)} (5%/yr under 62 at start)` : 'none');
+      bullet('Survivor', `${electionText(F)}; reduction applies while the spouse is alive and stops after the spouse dies; survivor annuity base = annuity after any age reduction, with COLAs`);
+      bullet('COLA', 'diet COLA (CPI ≤2% → CPI; 2–3% → 2%; >3% → CPI−1%), from the year after age 62 for regular retirees; survivor annuities always');
+      if (F.supplementEligible) bullet('Supplement', `${usd(F.ss62Today)} today's $ inflated to ${PS(w).retireYear} × ${F.supplementYears}/40 (years of service, rounded) = ${usd(F.supplementMonthly)}/mo; ends at 62; earnings test $1 per $2 over the SS limit ($24,480 in 2026, indexed)`);
+      md.push('');
     }
-    bullet('Age reduction', F.ageReduction > 0 ? `${pct(F.ageReduction)} (5%/yr under 62 at start)` : 'none');
-    bullet('Survivor', `${electionText}; reduction applies while the spouse is alive and stops after the spouse dies; survivor annuity base = annuity after any age reduction, with COLAs`);
-    bullet('COLA', 'diet COLA (CPI ≤2% → CPI; 2–3% → 2%; >3% → CPI−1%), from the year after age 62 for regular retirees; survivor annuities always');
-    if (F.supplementEligible) bullet('Supplement', `${usd(F.ss62Today)} today's $ inflated to ${S.retireYear} × ${F.supplementYears}/40 (years of service, rounded) = ${usd(F.supplementMonthly)}/mo; ends at 62; earnings test $1 per $2 over the SS limit ($24,480 in 2026, indexed)`);
-    md.push('', '### Social Security');
+    if (nonFeds.some((w) => inp.otherPension[w].monthly > 0)) {
+      md.push('### Other pension');
+      bullet('Amount', "the monthly amount in today's dollars, inflated to the year it starts, then raised by its own COLA each year; after the holder's death the surviving spouse keeps the survivor share");
+      md.push('');
+    }
+    md.push('### Social Security');
     bullet('Your FRA / factor', `${ym(P1.fraMonths / 12)}; claiming at ${ym(P1.claimAge)} = ${pct(P1.factor)} of PIA (−5/9% per month for 36 months early, −5/12% beyond; +2/3% per month delayed to 70)`);
     if (P2) bullet('Spouse FRA / factor', `${ym(P2.fraMonths / 12)}; claiming at ${ym(P2.claimAge)} = ${pct(P2.factor)} of PIA`);
     bullet('PIA growth', 'PIA (today\'s $) grows with inflation; benefits get COLA = inflation');
     if (P2) bullet('Spousal / survivor', 'spousal excess = max(0, 50% × other PIA − own PIA), reduced if started before FRA; survivor gets the larger of own benefit or the deceased\'s actual benefit (min 82.5% of PIA if claimed early), assumed to start at or after the survivor\'s FRA');
     bullet('Taxation of SS', 'provisional income = AGI excl. SS + 50% of SS; base $32k/$44k joint, $25k/$34k single (not indexed); up to 85% taxable');
-    md.push('', '### TSP, IRAs, RMDs and taxes');
-    bullet('RMDs', `start at ${S.rmdStartAge} (73 for births 1951–59, 75 for 1960+), IRS Uniform Lifetime divisor (24.6 at 75) on the prior year-end traditional TSP and traditional IRA balances (the TSP's still-working exception does not apply to IRAs); Roth TSP and Roth IRA have none; accounts pass to the surviving spouse`);
-    bullet('TSP withdrawals', 'traditional-only or Roth-only withdrawals are allowed (5 CFR 1650), so the two TSP balances are separate steps in the withdrawal order; both earn the same return');
-    bullet('Conversions and transfers', 'at the start of the year after the RMDs; conversions (traditional TSP or IRA → Roth TSP or Roth IRA) are ordinary income that year and their tax is paid from outside the converted money; transfers (Roth TSP → Roth IRA, traditional TSP → traditional IRA) are not taxed and carry their basis');
+    md.push('', '### Workplace plans, IRAs, RMDs and taxes');
+    bullet('RMDs', `each person's at their own age (73 for births 1951–59, 75 for 1960+; yours start at ${S.rmdStartAge}), IRS Uniform Lifetime divisor (24.6 at 75) on the prior year-end traditional workplace-plan and IRA balances (a workplace plan's still-working exception does not apply to IRAs); Roth accounts have none; after a death the survivor owns the accounts and their age drives the RMDs`);
+    bullet('Workplace-plan withdrawals', 'traditional-only or Roth-only withdrawals are allowed (5 CFR 1650 for the TSP; assumed for a 401(k)), so the two balances are separate steps in the withdrawal order; both earn the plan\'s return. Within each account type, the account of a spouse who can withdraw without a penalty comes first, then the older spouse\'s');
+    bullet('Conversions and transfers', "at the start of the year after the RMDs, between one person's own accounts; conversions (traditional TSP / 401(k) or IRA → Roth) are ordinary income that year and their tax is paid from outside the converted money; transfers (Roth TSP / 401(k) → Roth IRA, traditional TSP / 401(k) → traditional IRA) are not taxed and carry their basis");
     bullet('IRA rules', '10% penalty on traditional IRA withdrawals before 59½ (the year you turn 60 is the first penalty-free year; conversions exempt); Roth IRA 5-year rules assumed met; Roth IRA withdrawals before 59½ beyond contributions and conversions (US ordering rules) are flagged, not taxed');
     bullet('Federal tax', 'IRS Rev. Proc. 2025-32 (2026): MFJ brackets 10/12/22/24/32/35/37% with tops $24,800 / $100,800 / $211,400 / $403,550 / $512,450 / $768,700; standard deduction $32,200 MFJ / $16,100 single, +$1,650 per spouse 65+ (MFJ) or +$2,050 (single); 2025–28 senior deduction $6,000 per person 65+; LTCG 0/15/20% stacked on ordinary income; NIIT 3.8%; brackets, standard deduction, 65+ amounts and LTCG breakpoints indexed at inflation minus the chained-CPI gap (IRC §1(f)(3) uses chained CPI, which runs below CPI), other amounts with inflation; no IRS rounding to $25/$50');
     bullet('Filing status', 'MFJ while both alive (including the year of the first death), single afterwards');
-    bullet('Cash flow', 'each year: income → RMD → conversions and transfers → taxes → spending → shortfall withdrawals (money market first, then the withdrawal strategy, checking last) or surplus saved → growth (start-of-year flows). Conversion tax is paid from surplus, then the money market, brokerage, traditional TSP and IRA, Roth TSP and IRA, checking');
+    bullet('Cash flow', 'each year: income → RMD → conversions and transfers → taxes → spending → shortfall withdrawals (money market first, then the withdrawal strategy, checking last) or surplus saved → growth (start-of-year flows). Conversion tax is paid from surplus, then the money market, brokerage, traditional plans and IRAs, Roth plans and IRAs, checking');
     bullet('Surplus', 'leftover money tops checking up to its target first, then the money market up to its limit (if surplus is kept there), and the rest is invested in brokerage; checking above its target moves to the money market, and money market above its limit moves to brokerage (except in settling-in years)');
     bullet('Brokerage investments', 'a regular taxable brokerage account holding stock and bond funds (money market funds belong in the money market); cost basis tracked at average cost: surplus deposits, one-time inflows and money market above the limit add basis; each withdrawal realizes gain = withdrawal × (1 − basis ÷ balance at the start of the year), taxed as a long-term gain (and abroad if gains are selected). After losses (balance below basis) no gain is realized and the extra basis offsets later gains; losses are not deducted from other income');
     bullet('Cash-flow check', '(non-salary income incl. RMDs + all withdrawals) − (spending + taxes paid from this cash flow + saved − unfunded), every year; must be ≈ $0. While working, salary, benefits spent with it and the tax on them are outside this flow (pre-retirement living costs are not modeled)');
@@ -523,10 +635,14 @@
     if (suite) {
       const Fx = suite.fixed, St = suite.stochastic;
       const acct = (l, r, sa, sb) => `${l} ${pct(r.beforeRetirement)} / ${pct(sa)} → ${pct(r.afterRetirement)} / ${pct(sb)}`;
-      md.push(`${num(Fx.runs)} runs per lifespan mode, seed ${Fx.seed}; lognormal returns by account (mean / SD before → after retirement: ` +
-        [acct('TSP', T.returns, V.beforeRetirement.tsp, V.afterRetirement.tsp), acct('brokerage', BR.returns, V.beforeRetirement.brokerage, V.afterRetirement.brokerage),
-          iraT && acct('traditional IRA', IR.traditional.returns, V.beforeRetirement.traditionalIra, V.afterRetirement.traditionalIra),
-          iraR && acct('Roth IRA', IR.roth.returns, V.beforeRetirement.rothIra, V.afterRetirement.rothIra)].filter(Boolean).join('; ') + '; one shared market shock per year); ' +
+      const accts = planUsers.map((w) => acct(`${N(w).your} ${planName(w)}`, PLN[w].returns, V.beforeRetirement.workplacePlans, V.afterRetirement.workplacePlans));
+      accts.push(acct('brokerage', BR.returns, V.beforeRetirement.brokerage, V.afterRetirement.brokerage));
+      for (const w of WHO) {
+        if (usesIra(w, 'traditional')) accts.push(acct(`${N(w).your} traditional IRA`, IRS[w].traditional.returns, V.beforeRetirement.traditionalIra, V.afterRetirement.traditionalIra));
+        if (usesIra(w, 'roth')) accts.push(acct(`${N(w).your} Roth IRA`, IRS[w].roth.returns, V.beforeRetirement.rothIra, V.afterRetirement.rothIra));
+      }
+      md.push(`${num(Fx.runs)} runs per lifespan mode, seed ${Fx.seed}; lognormal returns by account (mean / SD before → after its holder retires: ` +
+        accts.join('; ') + '; one shared market shock per year); ' +
         `inflation SD ${pct(MC.inflation.volatility)}, AR(1) φ ${MC.inflation.persistence}. Each run has its own random streams, so run i sees the same market path in both modes. ` +
         `Fixed lifespans stop at the plan-to age; stochastic mortality samples both death ages per run from the SSA 2023 period life table (given current ages) and runs until the last death. ` +
         `Success = no unfunded retirement year.${opts.mcStale ? ' **Inputs changed after this run; results may be stale.**' : ''}`, '');
@@ -542,9 +658,9 @@
         ["Worst single-year shortfall, today's $ (95th / max)", (m) => `${usd(m.shortfall.worstYearReal.p95)} / ${usd(m.shortfall.worstYearReal.max)}`],
         ['Unfunded dollars by cause (base spending / one-time events)', (m) => (m.shortfall.cause.baseShare === null ? '—' : `${pct(m.shortfall.cause.baseShare, 0)} / ${pct(1 - m.shortfall.cause.baseShare, 0)}`)],
         ["Ending balance, today's $ (10th / 50th / 90th)", (m) => `${usd(m.endingBalanceReal.p10)} / ${usd(m.endingBalanceReal.p50)} / ${usd(m.endingBalanceReal.p90)}`],
-        ['Ending balance, nominal (10th / 50th / 90th)', (m) => `${usd(m.endingBalance.p10)} / ${usd(m.endingBalance.p50)} / ${usd(m.endingBalance.p90)}`],
+        ['Ending balance, future $ (10th / 50th / 90th)', (m) => `${usd(m.endingBalance.p10)} / ${usd(m.endingBalance.p50)} / ${usd(m.endingBalance.p90)}`],
         ["After-tax inheritance, today's $ (10th / 50th / 90th)", (m) => `${usd(m.afterTaxReal.p10)} / ${usd(m.afterTaxReal.p50)} / ${usd(m.afterTaxReal.p90)}`],
-        ['After-tax inheritance, nominal (10th / 50th / 90th)', (m) => `${usd(m.afterTax.p10)} / ${usd(m.afterTax.p50)} / ${usd(m.afterTax.p90)}`],
+        ['After-tax inheritance, future $ (10th / 50th / 90th)', (m) => `${usd(m.afterTax.p10)} / ${usd(m.afterTax.p50)} / ${usd(m.afterTax.p90)}`],
         ['Median depletion: your age in the first unfunded year (failing runs; you may no longer be alive)', (m) => (m.medianDepletionAge === null ? '—' : m.medianDepletionAge.toFixed(1))],
         ['Your death age (10th / 50th / 90th)', (m) => (m.mortality ? [m.mortality.youDeathAge.p10, m.mortality.youDeathAge.p50, m.mortality.youDeathAge.p90].map(Math.round).join(' / ') : `fixed ${H.you.lifespan}`)],
       ];
@@ -563,7 +679,7 @@
       const m = mcSel;
       const pick = m.years.map((y, i) => i).filter((i) => i % 5 === 0 || i === m.years.length - 1);
       md.push('', `Portfolio percentiles by year (${mcSelKey} lifespans${mcSelKey === 'stochastic' ? '; runs where someone is still alive' : ''}):`, '');
-      md.push("| Year | p10 nominal | p50 nominal | p90 nominal | p10 today's $ | p50 today's $ | p90 today's $ |" + (mcSelKey === 'stochastic' ? ' Alive |' : ''),
+      md.push("| Year | p10 future $ | p50 future $ | p90 future $ | p10 today's $ | p50 today's $ | p90 today's $ |" + (mcSelKey === 'stochastic' ? ' Alive |' : ''),
         '| --- | --- | --- | --- | --- | --- | --- |' + (mcSelKey === 'stochastic' ? ' --- |' : ''));
       for (const i of pick) {
         md.push(`| ${m.years[i]} | ${num(m.p10.nominal[i])} | ${num(m.p50.nominal[i])} | ${num(m.p90.nominal[i])} | ${num(m.p10.real[i])} | ${num(m.p50.real[i])} | ${num(m.p90.real[i])} |` +
@@ -584,7 +700,7 @@
       line('Years unfunded in failing runs (median)', (c) => (c.sel.durationP50 === null ? '—' : c.sel.durationP50));
       line('Lifetime federal income tax', (c) => usd(c.det.lifetimeFederalTax));
       line('Lifetime foreign income tax', (c) => usd(c.det.lifetimeForeignTax));
-      line('Ending balance, nominal (deterministic)', (c) => usd(c.det.endingBalance));
+      line('Ending balance, future $ (deterministic)', (c) => usd(c.det.endingBalance));
       line("Ending balance, today's $ (deterministic)", (c) => usd(c.det.endingBalanceReal));
       line("After-tax inheritance, today's $ (deterministic)", (c) => usd(c.det.afterTaxReal));
       line("After-tax inheritance, today's $ (Monte Carlo median)", (c) => usd(c.sel.afterTaxRealP50));
@@ -630,18 +746,19 @@
       }
     }
 
-    h2('Year-by-year projection (nominal dollars)');
+    h2('Year-by-year projection (future dollars: the amounts paid each year)');
     const ftc = FT.enabled && FT.relief === 'usCreditsForeignTax', adv = TX.mode === 'advanced';
-    md.push('Columns: Earned = salary + spouse + post-retirement earnings; 1x in / 1x out = one-time event inflows and outflows; Trad W = traditional TSP withdrawals including its RMD (RMD = total RMDs)' + (iraT ? '; TIRA W = traditional IRA withdrawals including its RMD' : '') + (iraR ? '; RIRA W = Roth IRA withdrawals' : '') +
-      (xferW.length ? '; Transfers = untaxed moves between accounts (Roth TSP → Roth IRA, traditional TSP → traditional IRA)' : '') + '; Brokerage W / MM W' + (hasChk ? ' / Chk W' : '') + ' = withdrawals from brokerage investments (stock and bond funds), the money market (money market funds, savings)' + (hasChk ? ' and checking' : '') + '; Brokerage gain = long-term gain in the brokerage withdrawal (the rest is cost basis); ' +
+    const planCol = planUsers.length === 1 ? planName(planUsers[0]) : 'plans', annCol = WHO.some((w) => !fed(w) && inp.otherPension[w].monthly > 0) ? 'Pensions' : 'FERS';
+    md.push(`Columns: Earned = salaries + post-retirement earnings; ${annCol} = annuities to the living (${annCol === 'FERS' ? 'FERS' : 'FERS and other pensions'}); 1x in / 1x out = one-time event inflows and outflows; Trad W = traditional ${plansTxt} withdrawals including RMDs (RMD = total RMDs)` + (iraT ? '; TIRA W = traditional IRA withdrawals including RMDs' : '') + (iraR ? '; RIRA W = Roth IRA withdrawals' : '') +
+      (xferW.length ? '; Transfers = untaxed moves between accounts (Roth plan → Roth IRA, traditional plan → traditional IRA)' : '') + '; Brokerage W / MM W' + (hasChk ? ' / Chk W' : '') + ' = withdrawals from brokerage investments (stock and bond funds), the money market (money market funds, savings)' + (hasChk ? ' and checking' : '') + '; Brokerage gain = long-term gain in the brokerage withdrawal (the rest is cost basis); ' +
       'Spending = recurring spending + healthcare + one-time outflows; Taxes = federal + state (+ foreign); Saved = surplus to ' + (hasChk ? 'checking, ' : '') + 'the money market or brokerage; Unfunded = spending not covered; ' +
       (WD.bridgeBucket.enabled ? 'Bucket = bridge-bucket balance at year end (part of the invested balances, not extra money); ' : '') +
       (ftc ? 'Fed tax = US federal tax after the foreign tax credit; Foreign = tax paid to ' + (FT.country || 'the foreign country') + '; US FTC = credit used; FTC c/f = credits carried forward at year end; ' : '') +
       (adv ? 'Ord taxable = ordinary taxable income (AGI − deduction, excluding long-term gains; what the brackets apply to); Bracket = its federal rate; Headroom = taxable income left before the next bracket (unused deduction when below it); ' : '') +
       'Check = cash-flow check (0 when sources equal uses; ⚠ if off by more than $5); ' +
-      'balances are end of year; Infl = cumulative inflation index (divide nominal by it for today\'s dollars).', '');
-    const cols = ['Year', 'Ages', 'Phase', 'Earned', 'FERS', 'Surv ann', 'Supp', 'SS you', 'SS sp', '1x in', '1x out', 'RMD', 'Trad W', 'Roth W'].concat(iraT ? ['TIRA W'] : [], iraR ? ['RIRA W'] : [], ['Brokerage W', 'Brokerage gain', 'MM W'], hasChk ? ['Chk W'] : [], ['Roth conv'], xferW.length ? ['Transfers'] : [])
-      .concat(adv ? ['Ord taxable', 'Bracket', 'Headroom'] : [], ['Spending', 'Fed tax', 'State', 'Foreign'], ftc ? ['US FTC', 'FTC c/f'] : [], ['Saved', 'Unfunded', 'MM'], hasChk ? ['Checking'] : [], ['Brokerage', 'Trad TSP', 'Roth TSP'], iraT ? ['Trad IRA'] : [], iraR ? ['Roth IRA'] : [], ['Total'], WD.bridgeBucket.enabled ? ['Bucket'] : [], ['Check', 'Infl']);
+      'balances are end of year; Infl = cumulative inflation index (divide future dollars by it for today\'s dollars).', '');
+    const cols = ['Year', 'Ages', 'Phase', 'Earned', annCol, 'Surv ann', 'Supp', 'SS you', 'SS sp', '1x in', '1x out', 'RMD', 'Trad W', 'Roth W'].concat(iraT ? ['TIRA W'] : [], iraR ? ['RIRA W'] : [], ['Brokerage W', 'Brokerage gain', 'MM W'], hasChk ? ['Chk W'] : [], ['Roth conv'], xferW.length ? ['Transfers'] : [])
+      .concat(adv ? ['Ord taxable', 'Bracket', 'Headroom'] : [], ['Spending', 'Fed tax', 'State', 'Foreign'], ftc ? ['US FTC', 'FTC c/f'] : [], ['Saved', 'Unfunded', 'MM'], hasChk ? ['Checking'] : [], ['Brokerage', `Trad ${planCol}`, `Roth ${planCol}`], iraT ? ['Trad IRA'] : [], iraR ? ['Roth IRA'] : [], ['Total'], WD.bridgeBucket.enabled ? ['Bucket'] : [], ['Check', 'Infl']);
     md.push('| ' + cols.join(' | ') + ' |', '|' + cols.map(() => ' --- ').join('|') + '|');
     for (const r of Y) {
       md.push('| ' + [
@@ -657,17 +774,18 @@
     [
       'Annual steps; no partial years, birth months, or prorated first COLA. The current year counts as a full year.',
       'PIA grows with inflation rather than a wage-indexed earnings history. No SS earnings test for early claimers, no survivor-benefit reduction before the survivor\'s FRA, no family maximum.',
-      'While working, salary is assumed to cover living costs; pre-retirement spending is not modeled.',
+      'While you work, the salaries are assumed to cover living costs; spending starts when you retire, and a spouse who works longer adds take-home pay. Pre-retirement spending is not modeled.',
+      'A non-federal workplace plan is a generic 401(k)-style plan: employer contributions follow the entered formula, and plan-specific rules (vesting, in-service withdrawals, 457(b) penalty exceptions) are not modeled. A non-federal pension is a fixed monthly amount with a fixed COLA and survivor share.',
       'Pay: GS step increases assume acceptable performance and the standard waiting periods; no promotions, quality step increases or grade changes, and GS-1 and GS-2\'s uneven steps are not modeled.',
-      'Each account has its own expected return and volatility before and after retirement (the TSP\'s traditional and Roth balances share one), and one market shock per year moves them all. Monte Carlo uses lognormal annual returns (no fat tails, no return–inflation correlation).',
-      'IRAs: Roth IRA 5-year rules are assumed met; Roth IRA contributions ignore the income limit; moves out of the TSP are assumed allowed when made (the TSP permits them after separation or from 59½); a foreign country is assumed not to tax direct rollovers.',
+      'Each account has its own expected return and volatility before and after retirement (a workplace plan\'s traditional and Roth balances share one), and one market shock per year moves them all. Monte Carlo uses lognormal annual returns (no fat tails, no return–inflation correlation).',
+      'IRAs: Roth IRA 5-year rules are assumed met; Roth IRA contributions ignore the income limit; moves out of a workplace plan are assumed allowed when made (the TSP permits them after separation or from 59½; 401(k) rules vary); a foreign country is assumed not to tax direct rollovers.',
       'Stochastic mortality uses the SSA 2023 period life table: no projected mortality improvement, no health or wealth adjustment, and the two spouses\' deaths are independent.',
       'Adaptive rules (contingent SS claiming, guardrails, deferrable events) run only in Monte Carlo. They compare the run\'s start-of-year real portfolio with the deterministic projection, which uses mean returns, so the median run trails it; thresholds near 100% trigger in most runs. Beyond the deterministic projection\'s last year (longer stochastic lives) the guardrail state is held.',
       'Monte Carlo shortfall causes are split pro rata between recurring spending and one-time outflows in each unfunded year.',
-      'After-tax inheritance applies one flat heirs\' rate to traditional TSP and IRA money, assumes a step-up in basis for brokerage investments, and ignores estate/inheritance taxes, the timing of heirs\' withdrawals (10-year rule) and the value of real estate.',
+      'After-tax inheritance applies one flat heirs\' rate to traditional plan and IRA money, assumes a step-up in basis for brokerage investments, and ignores estate/inheritance taxes, the timing of heirs\' withdrawals (10-year rule) and the value of real estate.',
       'The bridge bucket is an overlay: it changes returns (a fixed-return slice of the invested balance) but not which account is withdrawn. Real TSP withdrawals come out pro rata across funds, so "spend from the G Fund first" means withdraw and then rebalance. Its size comes from the deterministic plan, so in Monte Carlo it can run out early or have money left over.',
       'The cash-flow check covers the portfolio cash flow only: salary-funded living costs before retirement are not modeled, so they are outside it.',
-      'The 10% early-withdrawal penalty on TSP money taken before 59½ after separating before 55 is flagged in a warning but not added (the traditional IRA penalty is added). No TSP installment or annuity options, and no annual tax on brokerage dividends; brokerage gains use average cost basis (no choice of tax lots, no deduction of capital losses).',
+      'The 10% early-withdrawal penalty on workplace-plan money taken before 59½ after separating before 55 is flagged in a warning but not added (the traditional IRA penalty is added). No TSP installment or annuity options, and no annual tax on brokerage dividends; brokerage gains use average cost basis (no choice of tax lots, no deduction of capital losses).',
       'No itemized deductions, credits, AMT, or payroll taxes. State tax is a flat rate. Medicare Part D, Medigap, and long-term care costs are not modeled.',
       'FERS: no death-in-service benefits, deposits/redeposits, part-time proration, or tax-free recovery of employee contributions.',
       'Planning tools score candidates with Monte Carlo at one seed and a limited number of runs; differences of about one run (1 ÷ runs) are noise. The optimizer searches whole-year claim ages and a fixed set of conversion windows, claim ages first, then conversions; it is a guide, not a proof of optimality.',
@@ -681,12 +799,15 @@
     const q = [];
     if (hasSp) {
       const gap = H.you.birthYear - H.spouse.birthYear;
-      q.push(`Survivor protection: your spouse is ${Math.abs(gap)} years ${gap > 0 ? 'older' : 'younger'} than you. Is the ${P.survivorElection} survivor election adequate given the ${usd(F.initialAnnuity * F.survivorPct / 12)}/mo survivor annuity, the need for any survivor annuity to keep FEHB, and the Social Security survivor benefit?`);
+      const elections = feds.map((w) => `${N(w).your} ${FP[w].survivorElection} FERS survivor election (a ${usd(PS(w).fers.initialAnnuity * PS(w).fers.survivorPct / 12)}/mo survivor annuity)`);
+      q.push(`Survivor protection: your spouse is ${Math.abs(gap)} years ${gap > 0 ? 'older' : 'younger'} than you. ` + (elections.length
+        ? `Is ${list(elections)} adequate, given that FEHB continues only with a survivor annuity, and given the Social Security survivor benefit?`
+        : 'Is the survivor covered well enough by Social Security survivor benefits, any pension survivor share and the inherited accounts?'));
       q.push(`Claiming: you claim at ${ym(P1.claimAge)} and your spouse at ${ym(P2.claimAge)}. Since the survivor keeps the larger benefit, is this the best pairing for joint lifetime income and survivor protection?`);
     } else {
       q.push(`Claiming: is claiming Social Security at ${ym(P1.claimAge)} sensible given the assumed lifespan of ${H.you.lifespan}?`);
     }
-    if (F.supplementEligible) q.push(`The FERS supplement contributes about ${usd(sum(Y, (r) => r.supplement))} in total. How exposed is the plan if Congress eliminates it?`);
+    if (feds.some((w) => PS(w).fers.supplementEligible)) q.push(`The FERS supplement contributes about ${usd(sum(Y, (r) => r.supplement))} in total. How exposed is the plan if Congress eliminates it?`);
     if (convW.length && S.totalConversions > 0.5) {
       q.push(`The plan converts ${usd(S.totalConversions)} from traditional to Roth (${convW.map(moveText).join('; ')}). Are the size and timing right, given the brackets before and after Social Security and RMDs, IRMAA's two-year lookback${FT.enabled ? `, and ${FT.country || 'foreign'} tax residency from ${FT.residentFromYear}` : ''}?`);
     } else if (res.warnings && res.warnings.some((w) => w.code === 'rmdBracket')) {
@@ -694,12 +815,16 @@
     }
     if (S.peakCoreWithdrawalRate > 0.04) q.push(`The peak core withdrawal rate is ${pct(S.peakCoreWithdrawalRate)} in ${S.peakCoreWithdrawalYear} (all-in ${pct(S.peakWithdrawalRate)} in ${S.peakWithdrawalYear}). How large is the sequence-of-returns risk, and what buffer or spending rule would you add?`);
     {
-      const rets = [`TSP ${beforeAfter(T.returns)}`, `brokerage ${beforeAfter(BR.returns)}`].concat(iraT ? [`traditional IRA ${beforeAfter(IR.traditional.returns)}`] : [], iraR ? [`Roth IRA ${beforeAfter(IR.roth.returns)}`] : []);
+      const rets = planUsers.map((w) => `${N(w).your} ${planName(w)} ${beforeAfter(PLN[w].returns)}`).concat([`brokerage ${beforeAfter(BR.returns)}`]);
+      for (const w of WHO) {
+        if (usesIra(w, 'traditional')) rets.push(`${N(w).your} traditional IRA ${beforeAfter(IRS[w].traditional.returns)}`);
+        if (usesIra(w, 'roth')) rets.push(`${N(w).your} Roth IRA ${beforeAfter(IRS[w].roth.returns)}`);
+      }
       q.push(`Are these expected returns reasonable for the likely allocations and horizon: ${list(rets)}; with ${pct(inp.inflation.rate)} inflation?`);
     }
     if (MM.keepSurplus) q.push(`Surplus is held in the money market up to ${usd(MM.moveToBrokerageAbove)} (today's $) at a ${pct(MM.yield, 2)} yield. Is that buffer size sensible, and what is the cost of the cash drag?`);
     if (FT.enabled || FX.enabled) {
-      q.push(`Cross-border tax (${FT.country || 'country of residence'}): how will the residence country tax traditional TSP and IRA withdrawals, Roth withdrawals (contributions vs earnings) and Roth conversions for a US citizen who is a tax resident there? Which treaty articles apply (US–Mexico art. 19 pensions vs art. 20 government service, and the saving clause), and can a US foreign tax credit be claimed on US-source income?`);
+      q.push(`Cross-border tax (${FT.country || 'country of residence'}): how will the residence country tax traditional TSP / 401(k) and IRA withdrawals, Roth withdrawals (contributions vs earnings) and Roth conversions for a US citizen who is a tax resident there? Which treaty articles apply (US–Mexico art. 19 pensions vs art. 20 government service, and the saving clause), and can a US foreign tax credit be claimed on US-source income?`);
       q.push('Should Roth conversions be completed before becoming a foreign tax resident, and does that change the order in which accounts should be drawn?');
       q.push('Healthcare abroad: Medicare generally does not pay for care outside the US while FEHB does. Is the Medicare Part B decision right, given late-enrollment penalties if you return?');
       if (FX.enabled) q.push(`Currency: spending is in ${FX.code}. How should a ±20% currency move and the FX drift assumption affect the spending plan?`);

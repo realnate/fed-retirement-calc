@@ -1,9 +1,10 @@
 # FERS household retirement planner
 
-A self-contained, client-side retirement cash-flow calculator for US federal employees under FERS and their spouses.
-It projects the FERS annuity, FERS supplement, TSP (traditional and Roth), brokerage investments, checking and a money market account, both spouses' Social
-Security, federal and state income tax, RMDs, Roth conversions and account transfers, traditional and Roth IRAs,
-survivor scenarios, and an optional Monte Carlo run.
+A self-contained, client-side retirement cash-flow calculator for US federal employees under FERS and their households.
+Either spouse (or both) can be a federal employee. For each person it projects pay, a workplace plan (the TSP, or a
+401(k)-style plan for anyone else), traditional and Roth IRAs, the FERS annuity and supplement or another pension, and
+Social Security. For the household it adds brokerage investments, checking and a money market account, federal and
+state income tax, RMDs, Roth conversions and account transfers, survivor scenarios, and an optional Monte Carlo run.
 
 > **Educational estimate only — not financial, tax, investment, or legal advice.** Confirm annuity figures with OPM,
 > Social Security estimates with SSA, and decisions with a qualified professional.
@@ -30,14 +31,22 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 
 ## Using it
 
-1. **Inputs (left column).** Panels are collapsible: Household, Inflation, Employment, one panel per account (TSP,
-   IRAs, Brokerage investments, Checking & money market, each with its balance, contributions and returns),
-   Withdrawals, then FERS, Social Security, Spending, Taxes (with conversions and transfers), Foreign tax and Monte
-   Carlo. Each numeric input has a slider, a number box (type any value,
-   arrow keys step it), and a **?** help popover that explains the rule. Results recalculate about 150 ms after
-   each change.
-2. **Nominal $ / Today's $** (top bar) switches every card, chart, and table value. Flows in year *Y* are deflated
-   by cumulative inflation to the start of *Y*; end-of-year balances are deflated to the end of *Y*.
+1. **Inputs (left column).** Panels are collapsible: Household, Inflation, Employment, TSP / 401(k), IRAs, Brokerage
+   investments, Checking & money market, Withdrawals, FERS pension, FERS supplement, Other pension, Social Security,
+   Spending, Taxes (with conversions and transfers), Foreign tax and Monte Carlo. Panels about one person (Employment,
+   TSP / 401(k), IRAs, FERS pension, FERS supplement, Other pension) have a **You | Spouse** switch at the top; every
+   such panel shows the same person, and the switch disappears for a single household. "Federal employee (FERS)" under
+   Employment decides whether that person's plan is the TSP and whether the FERS panels or Other pension apply. Each
+   numeric input has a slider, a number box (type any value, arrow keys step it), and a **?** help popover that
+   explains the rule. Results recalculate about 150 ms after each change.
+2. **Today's dollars in, either dollars out.** Every amount you enter is in today's dollars (the plan's current year),
+   as the note above the input panels says; the plan inflates each one to the years it applies to. **Show results in:
+   Today's dollars / Future dollars**, at the top of the results (it stays in view while you scroll), changes only how
+   results are shown: in today's dollars (current buying power, easy to compare with your inputs; the default) or in
+   future dollars (the amounts actually paid each year, after inflation). It switches every card, chart, table and
+   computed figure in the input panels; the calculation is the same either way. Flows in year *Y* are deflated by
+   cumulative inflation to the start of *Y*; end-of-year balances to the end of *Y*. A figure that belongs to one
+   future year (an annuity or supplement when it starts, a High-3) says which dollars it is in.
 3. **Scenarios.** Name the plan and **Save** (stored in this browser's `localStorage`). **Duplicate**, **Delete**,
    and load saved plans from the dropdown. **Compare with (B)** overlays a saved scenario's portfolio balance on the
    current inputs (A). **Export/Import JSON** moves scenarios between machines; the file is laid out like the input
@@ -68,11 +77,11 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 7. **Planning tools.** These run in the background, and every candidate is scored by Monte Carlo at the same seed in
    the selected lifespan mode:
    - **What can we afford?** finds the highest base monthly spending that still meets a target success rate
-     (bisection; with a fixed seed, success can only fall as spending rises). It also finds the earliest retirement
-     age that meets the target, adjusting service for each candidate age so FERS eligibility, the annuity and the
+     (bisection; with a fixed seed, success can only fall as spending rises). It also finds your earliest retirement
+     age that meets the target, adjusting your service for each candidate age so FERS eligibility, the annuity and the
      supplement follow. Both have **Apply** buttons.
    - The **optimizer** searches both spouses' Social Security claim ages (whole years, 62–70), then Roth conversion
-     windows (fill 12/22/24/32% from retirement to several end ages, or none). The goal can be highest success, largest
+     windows on your accounts (fill 12/22/24/32% from your retirement to several end ages, or none). The goal can be highest success, largest
      median after-tax inheritance, or lowest lifetime tax. It ranks strictly and can apply any option or the best
      combination. Differences of about one run (1 ÷ runs) are noise. Median inheritance (the middle Monte Carlo run:
      at the last death with stochastic lifespans, at the end of the plan with fixed ones) and lifetime tax (the
@@ -82,7 +91,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
      median is lower or higher and why: volatile returns compound to less than the average, stochastic lifespans move
      the year the money is left, and adaptive rules apply only in Monte Carlo.
    - **Sensitivity** moves one assumption at a time (returns, volatility, inflation, healthcare inflation, spending,
-     retirement age, Social Security 78% from 2033, FERS COLA, supplement, lifespans, Mexico tax, peso drift). It shows
+     your retirement age, Social Security 78% from 2033, FERS COLA, supplement, lifespans, Mexico tax, peso drift). It shows
      a tornado chart of success or median inheritance (today's dollars), with a table.
 8. **Compare scenarios** runs 2–4 plans (saved scenarios and/or the current inputs). Each runs deterministically and in
    both Monte Carlo lifespan modes, at the current inputs' seed and run count. The results appear in a side-by-side
@@ -91,25 +100,25 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 
 ## Outputs
 
-- **Summary cards:** TSP at retirement; TSP when RMDs start; left to heirs (the ending balance, nominal and today's $,
-  with the pre-tax traditional-TSP share; real estate is not included); lifetime spending (living + healthcare in
+- **Summary cards:** the workplace plans (TSP / 401(k), both spouses') at your retirement and when RMDs start; left to
+  heirs (the ending balance, in future and today's dollars, with the pre-tax traditional share; real estate is not included); lifetime spending (living + healthcare in
   retired years, plus one-time outflows); depletion age or "Never"; peak withdrawal rate; lifetime income taxes
   (federal + state + foreign, with the breakdown and the retirement-only share; includes tax on salary while
-  working); TSP used during the bridge years (retirement → the later SS claim); Monte Carlo success %. Status cards
+  working); workplace-plan money used during the bridge years (your retirement → the later SS claim); Monte Carlo success %. Status cards
   use an icon and text, not color alone.
-- **Warnings panel** (plain English): MRA+10 reduction / no supplement; deferred retirement (no supplement, no FEHB);
-  not vested; supplement earnings test; under 5 years of FEHB; Part B special-enrollment deadline when someone turns
-  65 on active-employee FEHB; survivor election "none"; RMDs pushing into a higher bracket or IRMAA tier; IRMAA
+- **Warnings panel** (plain English), for whichever spouse it applies to: MRA+10 reduction / no supplement; deferred
+  retirement (no supplement, no FEHB); not vested; supplement earnings test; under 5 years of FEHB; Part B
+  special-enrollment deadline when someone turns 65 on active-employee FEHB; survivor election "none"; RMDs pushing into a higher bracket or IRMAA tier; IRMAA
   surcharges; depletion; widow(er) bracket jump; 10% early-withdrawal penalty risk; 402(g) cap; Roth catch-up rule.
-- **Milestone timeline:** retirement, annuity start (if postponed), MRA, supplement end, each SS claim, Medicare at
-  65 for each spouse, RMD start, conversions and transfers, each assumed death, and depletion. Markers can be
+- **Milestone timeline:** each spouse's retirement, annuity or pension start, MRA and supplement end, each SS claim,
+  Medicare at 65 for each spouse, each spouse's RMD start, conversions and transfers, each assumed death, and depletion. Markers can be
   hovered or keyboard-focused.
-- **Plan narrative:** about ten paragraphs covering the working years, retirement and the annuity, supplement, Social
-  Security, spending and the bridge years, cash handling, RMDs and taxes (including foreign), the survivor phase, and
+- **Plan narrative:** about ten paragraphs covering each spouse's working years, retirement and annuity or pension,
+  the supplement, Social Security, spending and the bridge years, cash handling, RMDs and taxes (including foreign), the survivor phase, and
   the outcome. See "Using it" for the full review packet.
 - **Charts:** income by source (stacked bars, survivor annuity and cash hatched) with a dashed spending + taxes line; account
   balances (stacked area); spending per month (living, FEHB, Part B, with a dashed line showing the same spending in
-  today's dollars when viewing nominal); checking & money market (money kept in and spent from each, moved to brokerage above the limit, their balances and
+  today's dollars when viewing future dollars); checking & money market (money kept in and spent from each, moved to brokerage above the limit, their balances and
   the limit, with a tooltip explaining where each year's surplus came from); federal, state, and foreign tax with the marginal bracket in the tooltip; withdrawal rate with a 4%
   reference; SS claim-age comparison (62 / 67 / 70, one panel per spouse, break-even ages labeled); Monte Carlo fan
   chart (10–90th and 25–75th percentile bands, median, deterministic path); scenario A vs B. Legends are HTML
@@ -121,41 +130,48 @@ The defaults are a made-up but typical household, meant as a starting point to r
 
 - **Household:** current year 2026. You were born in 1982 (44) and your spouse in 1980 (46). Both lifespans are 95,
   the plan runs to your age 95, and Monte Carlo lifespans are stochastic (you male, spouse female).
-- **Work:** a GS-12, step 5 in the Rest of U.S. locality ($101,443 in 2026), hired at 34 and ten years in. Raises are
-  2% a year, plus GS step increases: step 6 in 2027 (the next one is within a year), 7 in 2029, 8 in 2032, 9 in 2035
-  and 10 in 2038. You retire at 62 (2044) with 28 years of service and 1,000 hours of sick leave. Your spouse earns $60,000 (today's $) until 62 and saves $6,000 a year in brokerage investments.
+- **Work:** you are a GS-12, step 5 in the Rest of U.S. locality ($101,443 in 2026), hired at 34 and ten years in.
+  Raises are 2% a year, plus GS step increases: step 6 in 2027 (the next one is within a year), 7 in 2029, 8 in 2032,
+  9 in 2035 and 10 in 2038. You retire at 62 (2044) with 28 years of service and 1,000 hours of sick leave. Your
+  spouse is not a federal employee: $60,000 a year with 2% raises until 62 (2042).
 - **FERS:** retiring at 62 with 20+ years earns the 1.1% multiplier: High-3 ≈ $159.8k, so the basic annuity is
   ≈ $49,938/yr, less 10% for the full survivor annuity. There is no FERS supplement (it ends at 62).
-- **TSP:** $120k traditional and $30k Roth. You contribute 10% (30% of it Roth); the agency adds 5%. It returns 7%
-  before retirement (SD 15%) and 6% after (SD 10%).
+- **Workplace plans:** your TSP holds $120k traditional and $30k Roth; you contribute 10% (30% of it Roth) and the
+  agency adds 5%. Your spouse's 401(k) holds $80k traditional; they contribute 8% and the employer matches 50% of it up
+  to 6% of pay. Both return 7% before their holder retires (SD 15%) and 6% after (SD 10%).
 - **Other accounts:** $20k of brokerage investments (30% unrealized gain) and a $25k money market at 3% (limit
-  $50k, today's $). No IRAs.
+  $50k, today's $). No IRAs and no other pension.
 - **Social Security:** PIAs of $2,900 (you) and $2,200 (spouse), both claimed at 67.
 - **Spending:** $5,000/mo plus FEHB of $650/mo and Medicare Part B for both from 65, with healthcare costs rising
   4.5% a year (inflation is 2.5%, SD 1.5%, persistence 0.6). The survivor keeps 70%.
 - **One-time events:** a $35k car every 8 years from 62 through 85 (deferrable), $25k of home repairs at 65, 75 and
   85, and $60k a year of long-term care in the last two years of each person's life.
 - **Taxes:** advanced federal tax and a 4% flat state tax. No Roth conversions and no foreign tax.
-- **Outcome:** the projection never runs short; Monte Carlo success is about 85% with fixed lifespans and 82% with
-  stochastic ones. The warnings flag the 2066 RMD pushing taxable income from the 12% into the 22% bracket.
+- **Outcome:** the projection never runs short; Monte Carlo success is about 88% with fixed lifespans and 86% with
+  stochastic ones. The warnings flag the 2058 RMD pushing taxable income from the 12% into the 22% bracket.
 
 ## Plan file (JSON)
 
 Export JSON saves `{ app, name, exported, howToRead, inputs }`. `inputs` holds every setting, laid out like the input
 panels so a person or an AI assistant can find and change a setting without the app:
 
-- Each top-level section is one panel, in the panels' order: `household`, `inflation`, `employment`, `tsp`, `iras`,
-  `brokerage`, `checkingAndMoneyMarket`, `withdrawals`, `fersPension`, `fersSupplement`, `socialSecurity`,
-  `spending`, `taxes`, `foreignTax`, `monteCarlo`. Nested objects are the groups inside a panel, e.g.
-  `tsp.returns.afterRetirement`, `iras.roth.basisShare`, `checkingAndMoneyMarket.moneyMarket.moveToBrokerageAbove`,
+- Each top-level section is one panel, in the panels' order: `household`, `inflation`, `employment`,
+  `workplacePlans`, `iras`, `brokerage`, `checkingAndMoneyMarket`, `withdrawals`, `fersPension`, `fersSupplement`,
+  `otherPension`, `socialSecurity`, `spending`, `taxes`, `foreignTax`, `monteCarlo`. Nested objects are the groups
+  inside a panel, e.g. `checkingAndMoneyMarket.moneyMarket.moveToBrokerageAbove`,
   `monteCarlo.adaptiveRules.spendingGuardrails.enabled`. Names follow the panel labels.
+- Panels about one person hold `you` and `spouse` with the same settings, e.g. `employment.spouse.federal`,
+  `workplacePlans.you.returns.afterRetirement`, `iras.spouse.roth.basisShare`, `fersPension.you.serviceYears`.
+  Settings beside them apply to the household (`employment.spendBenefitsThatStartBeforeRetiring`, the FERS policy
+  scenarios `fersPension.averageSalaryYears` / `colaMode`, `socialSecurity.trustFundShortfall`). The spouse's settings
+  are ignored unless `household.married` is true.
 - Rates, returns and shares are decimals (0.07 = 7%). Dollar amounts are today's dollars a year unless the name ends
-  in `Monthly`; the few nominal amounts (manual High-3, OPM estimate, manual supplement, events not in today's $) are
-  named in `howToRead`.
-- Accounts are named `traditionalTsp`, `rothTsp`, `traditionalIra`, `rothIra` and `brokerage`; `withdrawals.order` is
-  a list of them (the money market always goes first and checking last).
-- `taxes.conversionsAndTransfers` is a list of `{ fromAccount, toAccount, fromAge, throughAge, howMuch, fillToTopOfBracket,
-  fixedAmount }`, where `howMuch` is `fillBracket` (conversions only), `fixedAmount` (today's $ a year) or `wholeBalance`.
+  in `Monthly`. The only amounts in future dollars are one-time events with `inTodaysDollars` false.
+- Account types are named `traditionalWorkplace`, `rothWorkplace` (the TSP or a 401(k)), `traditionalIra`, `rothIra`
+  and `brokerage`; `withdrawals.order` is a list of them (the money market always goes first and checking last).
+- `taxes.conversionsAndTransfers` is a list of `{ owner, fromAccount, toAccount, fromAge, throughAge, howMuch,
+  fillToTopOfBracket, fixedAmount }`: a move between two accounts of `owner` (`you` or `spouse`) at the owner's ages,
+  where `howMuch` is `fillBracket` (conversions only), `fixedAmount` (today's $ a year) or `wholeBalance`.
 - `spending.oneTimeEvents` is a list of `{ label, person, when, at, repeat, everyNYears, through, forNYears, amount,
   direction, taxed, inTodaysDollars, deferrable }`.
 - `howToRead` restates these conventions and lists every allowed value (`PLAN_GUIDE` and `ENUMS` in `engine.js`).
@@ -219,31 +235,41 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   *start + contributions + deposits + conversions in − conversions out − withdrawals + growth = end* holds for every
   account and every year, and cash sources equal uses (both tested).
 
+**People**
+- The plan has you and, if married, your spouse, each with their own job, workplace plan, IRAs, annuity and Social
+  Security. "Federal employee (FERS)" makes a person a FERS employee: GS pay, the TSP with agency contributions, and
+  the FERS annuity and supplement. Anyone else has a 401(k)-style plan with the employer contributions you enter and,
+  optionally, another pension. Either spouse, both or neither can be federal.
+- Spending starts when you retire. Until then the salaries are assumed to cover living costs, payroll taxes and income
+  tax on wages. A spouse who keeps working after you retire adds take-home pay (salary less their plan and Roth IRA
+  contributions), and that pay is taxed as wages.
+
 **Working years**
-- Salary grows by the yearly raise. With GS step increases on, it also moves up one step at a time from your current
-  step: after 1 year at steps 1–3, 2 years at steps 4–6 and 3 years at steps 7–9 (5 CFR 531.405; 18 years from step 1
-  to 10), with the next one when you say it is due (at most that step's waiting period away). Every step adds 1/30
-  of the step-1 rate (the General Schedule's equal step increments), so step 10 pays 30% more than step 1. Today's
-  salary is taken to be at the current step; for a High-3 that reaches back before today, earlier years are
-  back-projected the same way (step 10 is taken to have been reached at least three years ago). Promotions and
-  quality step increases are not modeled.
+- Pay grows by each person's yearly raise. With GS step increases on (federal employees), it also moves up one step at
+  a time from the current step: after 1 year at steps 1–3, 2 years at steps 4–6 and 3 years at steps 7–9 (5 CFR
+  531.405; 18 years from step 1 to 10), with the next one when it is due (at most that step's waiting period away).
+  Every step adds 1/30 of the step-1 rate (the General Schedule's equal step increments), so step 10 pays 30% more than
+  step 1. Today's salary is taken to be at the current step; for a High-3 that reaches back before today, earlier years
+  are back-projected the same way (step 10 is taken to have been reached at least three years ago). Promotions and
+  quality step increases are not modeled. Other pay grows with the raise only.
 - GS pay with locality is capped at Executive Schedule level IV (5 USC 5304(g); "GS pay cap this year", $197,200 in
   2026, 0 = no cap). By law level IV rises with the GS across-the-board raise, rounded to $100 (5 USC 5318), so the
-  cap grows with your annual raise. Pay is held at the cap, step increases add nothing above it, and the High-3 uses
-  the capped pay. A note says when the cap starts to apply. Salary is assumed to cover living costs, payroll taxes, and income
-  tax on wages; the spending input applies only after you retire. The optional "extra savings" goes to the taxable
-  account. One-time events and any income besides wages (e.g. a spouse's SS) still flow through the portfolio, and
-  only the *extra* tax they cause is paid from it.
-- Benefits that start before you retire, such as a spouse's Social Security claimed while you still work, are by
-  default spent along with your salary, so they and their taxes do not touch the portfolio. Turn off "Spend benefits
+  cap grows with the annual raise. Pay is held at the cap, step increases add nothing above it, and the High-3 uses
+  the capped pay. A note says when the cap starts to apply. The optional "savings while you work" (under Brokerage)
+  goes to the brokerage account. One-time events and any income besides wages (e.g. a spouse's SS) still flow through
+  the portfolio, and only the *extra* tax they cause is paid from it.
+- Benefits that start before you retire, such as a spouse's Social Security or annuity while you still work, are by
+  default spent along with the salaries, so they and their taxes do not touch the portfolio. Turn off "Spend benefits
   that start before you retire" to save them instead (to the money market up to the limit). The warnings panel notes either
   case.
-- Employee contributions are capped at 402(g). Agency 1% plus the match goes to traditional. Catch-up is "full
-  catch-up in addition to the regular %", and goes to Roth when prior-year salary exceeds the indexed $150,000.
-- Spouse earnings are optional wages in today's dollars (no spouse retirement plan is modeled).
+- Each person's employee contributions are capped at 402(g). A federal employee's agency 1% plus the match goes to
+  the traditional TSP; anyone else's employer adds `automatic` of pay plus `match` × the contribution up to `matchUpTo`
+  of pay, to the traditional 401(k). Catch-up is "full catch-up in addition to the regular %", and goes to Roth when
+  that person's prior-year salary exceeds the indexed $150,000.
 
 **FERS annuity**
-- Retirement type is detected from your retirement age, creditable service (without sick leave), and MRA:
+- For each federal employee, the retirement type is detected from their retirement age, creditable service (without
+  sick leave), and MRA:
   62+5, 60+20, MRA+30 (immediate unreduced); MRA+10 (5% per year under 62, permanent, unless 20+ years and the start
   is postponed to 60+); deferred (separated before eligibility, 5+ years) starting at the earliest unreduced age
   (MRA with 30+ years, 60 with 20+, else 62) or a postponed age you choose; under 5 years means no annuity.
@@ -252,18 +278,22 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - Annuity = multiplier × High-3 × (service + sick leave ÷ 2,087, truncated to whole months). 1.1% applies when you
   separate at 62+ with 20+ years of creditable service; sick leave does not count toward that test.
 - Auto High-3 is the highest 3 consecutive projected salaries before retirement (back-projected if retirement is
-  under 3 years away). The manual override is the gross monthly annuity *before* the survivor reduction and *after*
-  any MRA+10 reduction, in dollars of the first year it is paid. Current retirees should enter their current annuity.
-- Survivor election: the retiree's annuity is reduced 5% (partial) or 10% (full) while the spouse is alive. The
-  reduction stops the year after the spouse dies. If the retiree dies first, the survivor gets 25% or 50% of the
-  unreduced annuity (after any MRA+10 reduction, with all COLAs to date), starting the next year. The election is
-  forced to "none" if there is no spouse or the spouse died before the annuity starts.
+  under 3 years away). A manual High-3 is in today's dollars and is inflated to the separation year. An OPM estimate
+  replaces the computed annuity: the gross monthly annuity *before* the survivor reduction and *after* any MRA+10
+  reduction, in today's dollars, inflated to the first year it is paid. Agency estimates based on current pay are in
+  today's dollars; current retirees enter their current annuity. In Monte Carlo these follow each run's inflation.
+- Survivor election: the retiree's annuity is reduced 5% (partial) or 10% (full) while the other spouse is alive. The
+  reduction stops the year after that spouse dies. If the retiree dies first, the other spouse gets 25% or 50% of the
+  unreduced annuity (after any MRA+10 reduction, with all COLAs to date), starting the next year. With two federal
+  employees each election protects the other. An election is forced to "none" if there is no spouse or the spouse
+  died before the annuity starts.
+- The policy scenarios (High-5, reduced or no COLA) apply to everyone in the household under FERS.
 - Diet COLA uses the previous year's inflation. Regular retirees first get it the year after they turn 62. Survivor
   annuitants and special-category retirees get it every year. The first-year prorated COLA is ignored.
 
 **FERS supplement**
-- Paid only for immediate unreduced retirements (MRA+30, 60+20, special category) that begin before 62. It stops in
-  the year you turn 62, has no COLA, and is fixed at retirement.
+- Paid to a federal employee only for immediate unreduced retirements (MRA+30, 60+20, special category) that begin
+  before 62. It stops in the year they turn 62, has no COLA, and is fixed at retirement.
 - Auto amount = SS-at-62 (today's $, inflated to the retirement year) × years of FERS civilian service ÷ 40
   (5 USC 8421(b); OPM CSRS/FERS Handbook ch. 51). The years are rounded to the nearest whole year, with ½ rounding up,
   and capped at 40; sick leave doesn't count.
@@ -271,9 +301,15 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   reduced for claiming early, which is 70% of the PIA for anyone born in 1960 or later. OPM computes it from your
   FERS earnings only, so enter that figure if you have it. The 70% is not a separate cut to the supplement: for
   example, a $2,700 PIA gives $1,890 at 62, and 28 years of service pay $1,890 × 28 ÷ 40 = $1,323/mo. The default
-  SS-at-62 of $1,900/mo is about 70% of a $2,700 PIA from 28 years of FERS earnings. Set it to 0 to use 70% of your
-  PIA.
-- Earnings test: post-retirement earned income above the indexed limit cuts it $1 for every $2.
+  SS-at-62 of $1,900/mo is about 70% of a $2,700 PIA from 28 years of FERS earnings. Set it to 0 to use 70% of the
+  person's PIA.
+- A manual supplement is in today's dollars, inflated to the year it starts, then fixed.
+- Earnings test: that person's post-retirement earned income above the indexed limit cuts it $1 for every $2.
+
+**Other pension**
+- For someone who is not a federal employee: a monthly amount in today's dollars, inflated to the year it starts (the
+  start of the year the start age is reached), then raised by its own fixed COLA each year. After the holder's death
+  the surviving spouse keeps the survivor share (enter the amount already reduced for that option).
 
 **Social Security**
 - PIA is entered in today's dollars and grows with inflation, a simplification that stands in for wage indexing
@@ -294,38 +330,41 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   deduction, Social Security taxation via provisional income (AGI excluding SS + 50% of SS; thresholds not indexed;
   up to 85% taxable), long-term gains stacked at 0/15/20%, and the 3.8% NIIT on interest and gains. Simple mode applies one effective rate (MFJ or
   single) to AGI. State tax is a flat rate on federal taxable income.
-- Ordinary income includes wages minus traditional contributions, spouse and post-retirement earnings, annuity,
-  survivor annuity, supplement, RMDs and other traditional withdrawals, Roth conversions, and taxable one-time
+- Ordinary income includes both spouses' wages minus traditional contributions, post-retirement earnings, annuities,
+  survivor annuities, supplements, RMDs and other traditional withdrawals, Roth conversions, and taxable one-time
   inflows.
 - Brokerage investments track their cost basis at average cost. Money put in (surpluses, one-time inflows, cash moved
   above the limit) is basis and growth is gain. Each withdrawal realizes gain = withdrawal × (1 − basis ÷ balance at the
   start of the year), taxed as a long-term gain; the rest is basis coming back, untaxed. `gainsPct` is the
   unrealized-gain share of today's balance. After a loss (balance below basis) withdrawals realize no gain and the
   extra basis offsets later gains; capital losses are not deducted from other income.
-- **Conversions and transfers** happen at the start of the year, after the RMDs. A conversion moves traditional money
-  (TSP or IRA) to a Roth account (Roth TSP in-plan, or a Roth IRA) and is ordinary income that year. A transfer moves
-  money between accounts of the same tax type (Roth TSP → Roth IRA, traditional TSP → traditional IRA) and is not
-  taxed; a Roth TSP transfer carries its basis share into the Roth IRA. Each row is a fixed amount (today's $) per
-  year, the whole balance, or (conversions only) "fill to the top of bracket N": the headroom left in that bracket
-  after the year's other income. In a year the first conversion row covering your age applies; every transfer
-  applies. It is solved numerically,
+- **Conversions and transfers** happen at the start of the year, after the RMDs, between one person's own accounts,
+  at that person's ages. A conversion moves traditional money (TSP / 401(k) or IRA) to a Roth account (Roth TSP /
+  401(k) in-plan, or a Roth IRA) and is ordinary income that year. A transfer moves money between accounts of the same
+  tax type (Roth plan → Roth IRA, traditional plan → traditional IRA) and is not taxed; a Roth plan transfer carries
+  its basis share into the Roth IRA. Each row is a fixed amount (today's $) per year, the whole balance, or
+  (conversions only) "fill to the top of bracket N": the headroom left in that bracket after the year's other income.
+  In a year the first conversion row covering its owner's age applies (one conversion a year for the household);
+  every transfer applies. It is solved numerically,
   together with the withdrawal that pays the conversion's own tax, so ordinary taxable income (including any SS the
-  conversion makes taxable and any traditional TSP withdrawn to pay the conversion tax) lands within $0.50 below the
-  bracket top. Conversion tax is paid from surplus income first, then the money market, brokerage, traditional TSP
-  and IRA, then Roth, whatever the general withdrawal order is. A conversion is never larger than its tax can be paid for: if those accounts can't
+  conversion makes taxable and any traditional money withdrawn to pay the conversion tax) lands within $0.50 below the
+  bracket top. Conversion tax is paid from surplus income first, then the money market, brokerage, traditional plans
+  and IRAs, then Roth, whatever the general withdrawal order is. A conversion is never larger than its tax can be paid for: if those accounts can't
   cover it, the conversion is reduced.
-- RMDs: Uniform Lifetime Table on the prior year-end traditional TSP and traditional IRA balances, from age 73/75 (by
-  birth year). The TSP's RMD waits while you still work; the IRA's does not. On the owner's death the accounts pass to
-  the surviving spouse, whose age and birth year then drive RMDs. Roth TSP and Roth IRA have no RMDs.
-- **TSP vs IRAs:** the TSP's traditional and Roth balances share one fund allocation, so one return (before and after
-  retirement). Withdrawals can be traditional-only or Roth-only (5 CFR 1650), so they are separate steps in the
-  withdrawal order. Each IRA is invested on its own, with its own returns. Traditional IRA withdrawals before 59½ add
-  the 10% penalty (the year you turn 60 is the first penalty-free year; conversions are exempt): the TSP's
-  separation-at-55 exception does not apply to IRAs. Roth IRA 5-year rules are assumed met; Roth IRA withdrawals
-  before 59½ beyond contributions and conversions (US ordering rules) raise a warning but are not taxed. Optional
-  Roth IRA contributions while working come from salary, capped at the IRA limit ($7,500 + $1,100 at 50+, 2026,
-  indexed); the income limit is not checked. Moving TSP money to an IRA while still working and under 59½ raises a
-  warning (the TSP allows it after separation or from 59½).
+- RMDs: Uniform Lifetime Table on each person's prior year-end traditional plan and traditional IRA balances, from
+  their own age 73/75 (by birth year). A workplace plan's RMD waits while its holder still works there; an IRA's does
+  not. After a death the surviving spouse owns the accounts, and the survivor's age and birth year then drive their
+  RMDs (as if rolled into the survivor's own). Roth plans and Roth IRAs have no RMDs.
+- **Workplace plans vs IRAs:** a plan's traditional and Roth balances share one fund allocation, so one return (before
+  and after its holder retires). Withdrawals can be traditional-only or Roth-only (5 CFR 1650 for the TSP; assumed for
+  a 401(k)), so they are separate steps in the withdrawal order. Each IRA is invested on its own, with its own returns.
+  Traditional IRA withdrawals before the owner's 59½ add the 10% penalty (the year they turn 60 is the first
+  penalty-free year; conversions are exempt): the separation-at-55 exception does not apply to IRAs. Roth IRA 5-year
+  rules are assumed met; Roth IRA withdrawals before 59½ beyond contributions and conversions (US ordering rules)
+  raise a warning but are not taxed. Optional Roth IRA contributions while working come from that person's salary,
+  capped at the IRA limit ($7,500 + $1,100 at 50+, 2026, indexed); the income limit is not checked. Moving plan money
+  to an IRA while still working there and under 59½ raises a warning (the TSP allows it after separation or from
+  59½).
 - IRMAA: Part B premiums use MAGI from two years earlier against indexed thresholds. With fewer than two years of
   history, no surcharge applies.
 
@@ -336,7 +375,9 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   inflows or outflows, and can be taxable as ordinary income or long-term gain.
 - Foreign-currency mode: local-currency spending × inflation ÷ (FX rate × (1 + drift)^years). The ±20% shock reruns
   the whole projection with the USD cost of local spending 20% higher or lower.
-- Shortfalls are withdrawn in the chosen order (default brokerage → traditional → Roth). Any surplus, including an RMD
+- Shortfalls are withdrawn in the chosen order of account types (default brokerage → traditional → Roth). Within a
+  type, the account of a spouse who can withdraw without a penalty goes first (a workplace plan once its holder has
+  left that job; an IRA from 59½), then the older spouse's. Any surplus, including an RMD
   beyond what's needed, is deposited after tax into checking up to its target, the money market up to its limit, then brokerage investments. If the accounts run dry, the depletion year
   is flagged and the projection keeps going with the unmet amount shown as **Unfunded**.
 - **Bridge bucket** (`bridgeYears`, `bridgeStartYearsBefore`, `bridgeReturn`): a low-risk sleeve like the G Fund.
@@ -359,22 +400,24 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - **Social Security shortfall:** a share of scheduled benefits (own, spousal and survivor) paid from a chosen year.
   A preset applies the 2026 Trustees projection: retirement-fund reserves depleted in late 2032, then about 78% payable.
 - **FERS policy scenarios:** High-5 instead of High-3 (auto averages the highest 5 consecutive projected salaries). The
-  COLA can be current-law diet COLA, the diet COLA minus X points (floored at 0), or none; this applies to the annuity
-  and the survivor annuity. The supplement can be switched off ("eliminated by Congress").
+  COLA can be current-law diet COLA, the diet COLA minus X points (floored at 0), or none; this applies to every FERS
+  annuity and survivor annuity in the household. The supplement can be switched off ("eliminated by Congress").
 - **Withdrawal strategies:** after cash, either the fixed order, proportional to the taxable/traditional/Roth balances,
-  or traditional TSP and IRA up to the top of a chosen bracket (solved against the year's taxable income) and then
+  or traditional plans and IRAs up to the top of a chosen bracket (solved against the year's taxable income) and then
   the order. Optionally, one-time outflows are paid from the Roth accounts first. The order is a list you rearrange
   with up/down buttons.
 - **Recurring and multi-year events:** each event repeats once, every N years from its start through an end
   year/age (0 = to the end of the plan), or each year for N consecutive years. Every occurrence is inflated from
   today's dollars to its own year and is deferred independently under guardrails.
-- **Conversions and transfers** (`taxes.conversionsAndTransfers`): a list of moves by your age (see "Plan file"); for
-  example move the whole Roth TSP to a Roth IRA at 57 and fill 24% converting traditional TSP into it. The UI flags
+- **Conversions and transfers** (`taxes.conversionsAndTransfers`): a list of moves by their owner's age (see "Plan
+  file"); for example move your whole Roth TSP to your Roth IRA at 57 and fill 24% converting traditional TSP into it. The UI flags
   overlapping conversions.
-- **Returns by account:** mean and SD before and after retirement for the TSP, brokerage, traditional IRA and Roth
-  IRA. In Monte Carlo all share one market shock per year (perfect rank correlation).
-- **After-tax inheritance** = Roth (TSP and IRA) + money market + checking + brokerage (stepped-up basis) +
-  traditional (TSP and IRA) × (1 − heirs' rate, default 22%). It is shown deterministically, with its composition and Monte Carlo percentiles. It ignores estate and
+- **Returns by account:** each person's workplace plan and IRAs have their own expected returns before and after
+  that person retires, and the brokerage account before and after you retire. Volatility is set by account type and
+  shared by both spouses' accounts of that type. In Monte Carlo all share one market shock per year (perfect rank
+  correlation).
+- **After-tax inheritance** = Roth (plans and IRAs) + money market + checking + brokerage (stepped-up basis) +
+  traditional (plans and IRAs) × (1 − heirs' rate, default 22%). It is shown deterministically, with its composition and Monte Carlo percentiles. It ignores estate and
   inheritance taxes, the timing of heirs' withdrawals, and real estate.
 - **IRMAA cost:** each year's extra Part B premium above the standard amount (a table column). The warnings state the
   dollar amounts.
@@ -496,12 +539,17 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   earnings test for early claimers, no reduced survivor benefits before the survivor's FRA, no family maximum, no
   disability, and no SS on the deceased's record before 60.
 - Pay: no promotions, grade changes or quality step increases; GS step increases assume acceptable performance, and the
-  uneven steps of GS-1 and GS-2 are not modeled. Non-GS pay plans have no step schedule (turn step increases off).
+  uneven steps of GS-1 and GS-2 are not modeled. Non-GS federal pay plans have no step schedule (turn step increases
+  off). Spending starts when you retire, whoever retires first.
+- Non-federal jobs: the workplace plan is a generic 401(k)-style plan (the entered employer formula; no vesting,
+  in-service withdrawal or 457(b) penalty rules), and another pension is a fixed monthly amount with a fixed COLA and
+  survivor share.
 - FERS: no death-in-service benefits, no basic employee death benefit, no deposit/redeposit service, no part-time
   proration, no CSRS-component computation, no 1% FERS-FRAE contribution differences, no recovery of employee
   contributions (the small tax-free portion of the annuity is taxed in full), no mandatory LEO retirement age, and
   no FEHB premium change at retirement.
-- TSP: one blended return per year for all funds and accounts; no 10% early-withdrawal penalty (a warning is shown);
+- Workplace plans: one blended return per year for all of a plan's funds; no 10% early-withdrawal penalty on plan money
+  (a warning is shown); an inherited plan or IRA is treated as the survivor's own;
   no Roth 5-year rule; installment and annuity options are not modeled; brokerage investments are not taxed annually
   on dividends or interest; its basis is average cost (no tax-lot selection), and capital losses are never deducted
   from other income.
@@ -530,11 +578,16 @@ node engine.test.js     # or open tests.html
 The suite covers SS claim factors (62 → 0.70, 64 → 0.80, 67 → 1.00, 70 → 1.24), FRA lookup, spousal excess and
 factors, provisional-income taxation, diet COLA, pension formula and 1.1% multiplier, MRA table, MRA+10 25%
 reduction and postponement, retirement types, supplement amount and service rounding / end at 62 / zero for MRA+10 / earnings test,
-survivor reduction and restoration, survivor annuity with COLA, the COLA start age, RMD ages and divisors, 2026 tax
+survivor reduction and restoration, survivor annuity with COLA, the COLA start age, the spouse's own job, plan, IRAs
+and annuity (two FERS annuities with survivor protection both ways, a 401(k) with its employer formula and RMDs at
+its holder's age and then the survivor's, another pension's COLA and survivor share, the order of the two spouses'
+accounts of a type, conversions on the spouse's accounts, a single household ignoring the spouse's settings, and a
+spouse working after you retire), RMD ages and divisors, 2026 tax
 math, LTCG stacking, the NIIT on interest and gains, GS step increases (schedule, pay ratio, High-3 back-projection) and the pay cap, brokerage cost basis (deposits as basis, gains conserved through losses), IRAs (RMDs, the 10%
 penalty, Roth IRA contributions and basis, art. 20 covering only the TSP), conversions vs. untaxed transfers, one TSP
 return with separate IRA returns, filing-status switch, Roth bracket fill, conversion tax paid from taxable, withdrawal order,
-depletion, mass and cash conservation across eight scenarios (including stochastic, cash, and foreign tax), Monte Carlo
+depletion, mass and cash conservation for every account (including stochastic, cash, foreign tax and two-person
+households, with the household totals equal to the sum of the accounts), Monte Carlo
 reproducibility, SS break-even, input normalization, the cash account (off, cap, sweep,
 drawn-first, interest taxed), foreign tax (Roth with no credit, credit offset, exemption, residency start, default
 income types), the plan report (every section present, one table row per year, no "undefined"/"NaN" text across
