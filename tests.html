@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engine Tests</title>
+<style>
+:root { color-scheme: light; --page: #f9f9f7; --surface: #fcfcfb; --text-1: #0b0b0b; --text-2: #52514e; --good: #006300; --bad: #b02a2a; --border: rgba(11,11,11,.12); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark; --page: #0d0d0d; --surface: #1a1a19; --text-1: #fff; --text-2: #c3c2b7; --good: #4cc94c; --bad: #ff8a8a; --border: rgba(255,255,255,.12); } }
+:root[data-theme="dark"] { color-scheme: dark; --page: #0d0d0d; --surface: #1a1a19; --text-1: #fff; --text-2: #c3c2b7; --good: #4cc94c; --bad: #ff8a8a; --border: rgba(255,255,255,.12); }
+body { margin: 0; background: var(--page); color: var(--text-1); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+p { color: var(--text-2); margin: 0 0 16px; }
+ol { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+li { padding: 8px 12px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 56px 1fr; gap: 8px; }
+li:last-child { border-bottom: 0; }
+.ok { color: var(--good); font-weight: 650; } .fail { color: var(--bad); font-weight: 650; }
+.err { grid-column: 2; color: var(--bad); font-family: ui-monospace, monospace; font-size: 12.5px; }
+#summary { font-weight: 650; font-size: 16px; margin: 12px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Engine tests</h1>
+  <p>Runs <code>engine.test.js</code> against <code>engine.js</code> and <code>report.js</code> in this browser. The same file runs under Node with <code>node engine.test.js</code>.</p>
+  <div id="summary" role="status">Running…</div>
+  <ol id="list"></ol>
+</main>
+<script src="engine.js"></script>
+<script src="legacy.js"></script>
+<script src="report.js"></script>
+<script src="engine.test.js"></script>
+<script>
+(function () {
+  const results = window.__engineTestResults || [];
+  const list = document.getElementById('list');
+  for (const r of results) {
+    const li = document.createElement('li');
+    const tag = document.createElement('span'); tag.className = r.ok ? 'ok' : 'fail'; tag.textContent = r.ok ? '✓ pass' : '✗ FAIL';
+    const name = document.createElement('span'); name.textContent = r.name;
+    li.append(tag, name);
+    if (!r.ok) { const e = document.createElement('span'); e.className = 'err'; e.textContent = r.error; li.append(e); }
+    list.append(li);
+  }
+  const failed = results.filter((r) => !r.ok).length;
+  const s = document.getElementById('summary');
+  s.textContent = results.length ? `${results.length - failed} of ${results.length} passed${failed ? ` — ${failed} failed` : ''}` : 'No results: engine.js or engine.test.js failed to load.';
+  s.className = failed || !results.length ? 'fail' : 'ok';
+  document.title = `Engine Tests (${results.length - failed}/${results.length})`;
+})();
+</script>
+</body>
+</html>
