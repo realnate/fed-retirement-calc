@@ -8,6 +8,13 @@ survivor scenarios, and an optional Monte Carlo run.
 > **Educational estimate only — not financial, tax, investment, or legal advice.** Confirm annuity figures with OPM,
 > Social Security estimates with SSA, and decisions with a qualified professional.
 
+## Built with AI assistance
+
+Much of this project's code, its tests and this documentation were written by Claude, Anthropic's AI model, using
+Claude Code, working from the author's requirements, questions and corrections. The test suite covers each rule
+(see "Tests"), but the code has not been independently audited. Treat its numbers as estimates to verify, not as
+authoritative figures.
+
 ## Files
 
 | File | What it is |
@@ -15,7 +22,6 @@ survivor scenarios, and an optional Monte Carlo run.
 | `index.html` | The app: UI, charts (Chart.js 4 from cdnjs), scenarios. Contains no financial math. |
 | `engine.js` | Pure, side-effect-free calculation engine. `simulate(inputs, opts?) → { years, summary, warnings, milestones }`, plus `monteCarlo`, `ssClaimComparison`, and every rule as a small exported function. All statutory values live in one `CONSTANTS` object. |
 | `report.js` | Pure, DOM-free report builder: `buildPlanReport(result, opts) → { story, markdown }`, the plain-English narrative and the full review packet. |
-| `legacy.js` | Loads plan files and saved scenarios from before October 2026's input restructure (schemas 1–8) by converting them to the current schema. The engine only knows the current schema. |
 | `engine.test.js` | Engine and report tests. Runs under Node (`node engine.test.js`) and in the browser via `tests.html`. |
 | `tests.html` | Browser test runner. |
 
@@ -37,9 +43,9 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
    current inputs (A). **Export/Import JSON** moves scenarios between machines; the file is laid out like the input
    panels (see "Plan file" below), so it can be edited by hand or by an AI assistant and imported back. Importing lists
    any setting that was ignored, missing or not allowed. The URL hash always encodes the
-   current inputs (as a diff from the defaults), so **Copy link** reproduces the scenario anywhere. A link made with
-   an earlier version's defaults can't be rebuilt, and the app says so; share the exported file instead. Your working
-   inputs are also autosaved and restored on reload.
+   current inputs (as a diff from the defaults), so **Copy link** reproduces the scenario anywhere. A link may not
+   open after an update that changes the defaults, so keep the exported file for anything you want to keep. Your
+   working inputs are also autosaved and restored on reload.
 4. **Monte Carlo.** Enable it in its panel and press **Run Monte Carlo**. It runs in a Web Worker (built from the
    engine's own source, so it works from `file://`) and falls back to the main thread if workers are blocked.
    It does not rerun automatically on input changes; a "stale" badge appears instead. Every run computes both
@@ -111,8 +117,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 
 ## Default household
 
-The defaults are a made-up but typical household (defaults revision 9, October 2026), meant as a starting point to
-replace with your own numbers:
+The defaults are a made-up but typical household, meant as a starting point to replace with your own numbers:
 
 - **Household:** current year 2026. You were born in 1982 (44) and your spouse in 1980 (46). Both lifespans are 95,
   the plan runs to your age 95, and Monte Carlo lifespans are stochastic (you male, spouse female).
@@ -133,9 +138,6 @@ replace with your own numbers:
 - **Taxes:** advanced federal tax and a 4% flat state tax. No Roth conversions and no foreign tax.
 - **Outcome:** the projection never runs short; Monte Carlo success is about 85% with fixed lifespans and 82% with
   stochastic ones. The warnings flag the 2066 RMD pushing taxable income from the 12% into the 22% bracket.
-
-Share links made with earlier defaults revisions are not decoded. Plan files and saved scenarios from any version
-hold every setting and load.
 
 ## Plan file (JSON)
 
@@ -191,7 +193,7 @@ All 2026 values, checked in October 2026. Each entry in the code carries its own
 | UMA | MXN 117.31/day from Feb 1, 2026; pension exemption 15 × UMA/day | INEGI; LISR art. 93 fr. IV |
 | Foreign tax credit carryforward | 10 years | IRC §904(c) |
 | FERS MRA table | 55 (≤1947) → 56 (1953–1964) → 57 (1970+) | 5 USC 8412(h) |
-| FERS multiplier, survivor, supplement, diet COLA | 1% / 1.1% (62+ with 20 yrs) / special 1.7% first 20; −5% & 25% or −10% & 50%; SS62 × yrs ÷ 40; CPI ≤2% → CPI, 2–3% → 2%, >3% → CPI−1 | 5 USC 8415, 8419, 8421, 8442, 8462 |
+| FERS multiplier, survivor, supplement, diet COLA | 1% / 1.1% (62+ with 20 yrs) / special 1.7% first 20; −5% & 25% or −10% & 50%; SS62 × yrs (rounded, ≤ 40) ÷ 40; CPI ≤2% → CPI, 2–3% → 2%, >3% → CPI−1 | 5 USC 8415, 8419, 8421, 8442, 8462 |
 
 Dollar amounts are indexed from 2026 with your inflation assumption, except those marked "not indexed". The federal
 brackets, standard deduction, 65+ amounts and LTCG breakpoints grow at inflation minus a chained-CPI gap (Taxes →
@@ -262,7 +264,13 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 **FERS supplement**
 - Paid only for immediate unreduced retirements (MRA+30, 60+20, special category) that begin before 62. It stops in
   the year you turn 62, has no COLA, and is fixed at retirement.
-- Auto amount = SS-at-62 (today's $, inflated to the retirement year) × full years of FERS service ÷ 40. The default
+- Auto amount = SS-at-62 (today's $, inflated to the retirement year) × years of FERS civilian service ÷ 40
+  (5 USC 8421(b); OPM CSRS/FERS Handbook ch. 51). The years are rounded to the nearest whole year, with ½ rounding up,
+  and capped at 40; sick leave doesn't count.
+- SS-at-62 is the Social Security benefit you would get by claiming at 62: your PIA (the full-retirement-age benefit)
+  reduced for claiming early, which is 70% of the PIA for anyone born in 1960 or later. OPM computes it from your
+  FERS earnings only, so enter that figure if you have it. The 70% is not a separate cut to the supplement: for
+  example, a $2,700 PIA gives $1,890 at 62, and 28 years of service pay $1,890 × 28 ÷ 40 = $1,323/mo. The default
   SS-at-62 of $1,900/mo is about 70% of a $2,700 PIA from 28 years of FERS earnings. Set it to 0 to use 70% of your
   PIA.
 - Earnings test: post-retirement earned income above the indexed limit cuts it $1 for every $2.
@@ -352,7 +360,7 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   A preset applies the 2026 Trustees projection: retirement-fund reserves depleted in late 2032, then about 78% payable.
 - **FERS policy scenarios:** High-5 instead of High-3 (auto averages the highest 5 consecutive projected salaries). The
   COLA can be current-law diet COLA, the diet COLA minus X points (floored at 0), or none; this applies to the annuity
-  and the survivor annuity. The "supplement eliminated" switch already existed.
+  and the survivor annuity. The supplement can be switched off ("eliminated by Congress").
 - **Withdrawal strategies:** after cash, either the fixed order, proportional to the taxable/traditional/Roth balances,
   or traditional TSP and IRA up to the top of a chosen bracket (solved against the year's taxable income) and then
   the order. Optionally, one-time outflows are paid from the Roth accounts first. The order is a list you rearrange
@@ -399,8 +407,7 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - With **Keep surplus in the money market** on, each year's surplus (after checking) goes to the money market until
   it reaches the limit (**Move money market above this to brokerage**). The limit is in today's dollars and indexed.
   Surplus above it, and any money market balance already above it, is invested in brokerage investments. With the
-  option off, every surplus is invested in brokerage investments (the original v1 behavior; results are identical,
-  which a test checks).
+  option off, every surplus is invested in brokerage investments.
 - **Settling-in years after retiring:** for the first N years of retirement the money market has no limit, so
   money waiting for large purchases (such as home-sale proceeds) stays out of the market. From the next year the
   limit applies again and anything above it moves to brokerage. Before retirement the limit applies as usual.
@@ -453,7 +460,7 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - **Seeding:** each run has its own mulberry32 streams, derived from the seed and the run number. Run *i* therefore
   sees the same market path in both lifespan modes, and results are reproducible.
 - **Inflation:** optionally random, floored at −3%, with optional AR(1) persistence φ:
-  dev_t = φ·dev_{t−1} + σ·√(1−φ²)·z. So `inflationSd` stays the long-run SD, and φ = 0 reproduces the old
+  dev_t = φ·dev_{t−1} + σ·√(1−φ²)·z. So `inflationSd` stays the long-run SD, and φ = 0 gives
   independent draws. Each run's inflation path drives everything: the FERS diet COLA (from the prior year's CPI), SS
   COLA, bracket/deduction/limit indexing, spending, and healthcare (simulated CPI + healthInflation − inflation).
   A test feeds a fixed path through each of these.
@@ -514,55 +521,6 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   - no carryback
   - income the US may tax as the source country (such as US dividends) is not credited by Mexico first
 
-## Discrepancy with the original specification
-
-The requested test "provisional income: MFJ, $20k other income + $30k SS → $0 SS taxable" does not match IRS
-Publication 915. Provisional income is $20,000 + ½ × $30,000 = $35,000, which is $3,000 over the $32,000 MFJ base
-amount, so $1,500 is taxable. The test suite asserts $1,500 for that case, and asserts $0 for $15,000 and $17,000
-of other income (provisional income at or below $32,000).
-
-## Version control
-
-The project is a git repository. `main` (tagged `v1-baseline`) holds the original version. Later work lives on its
-own branch (the cash, foreign-tax, and narrative changes are on `cash-foreign-tax-narrative`). To go back:
-`git checkout v1-baseline` (look) or `git checkout main` (the branch before the changes).
-
-## Backward compatibility
-
-- Inputs schema 9 (defaults revision 8, October 2026) laid the inputs out like the input panels, with descriptive
-  names and readable values (see "Plan file"). It changes no results. Files, saved scenarios and the autosaved working
-  copy from schemas 1–8 still load: `legacy.js` normalizes them in their own schema, as described
-  below, and maps every setting onto schema 9. Comparing the old and new engines on 320 plans (deterministic and
-  Monte Carlo, plus the planning tools) gave identical results. Saved scenarios are converted when loaded; save
-  them again to store them in the new layout. Delete `legacy.js` and its script tags to drop old files.
-
-The notes below describe how older schemas map onto schema 8, which `legacy.js` still does before the step to 9.
-
-- Inputs schema is version 6: it added `taxes.taxIndexGap` (chained-CPI bracket indexing). Unlike other added fields,
-  older files get the current default (0.25%) rather than the old behavior (0%), because it corrects
-  an assumption; set it to 0% to reproduce their earlier results.
-- Inputs schema 5: version 4 files load unchanged: the v5 fields (event person, SS payable share, High-N,
-  COLA mode, withdrawal strategy, lumps from Roth) default to current behavior.
-- Inputs schema 3 notes: Version 1 and 2 files load unchanged:
-  - v2 added the lifespan mode and sex, inflation persistence, adaptive rules, and event `deferrable`.
-  - v3 added event repeats, per-account returns, and the heirs' rate.
-  - Fields added since a file was saved get values that reproduce the older behavior. v3 also turned the single
-    Roth block into `roth.windows`: an "off" block becomes an empty list, otherwise one window.
-- Schema 4 added the Mexico tax method, relief mode, art. 20 toggle, UMA exemption, Roth mode and Roth basis share, and
-  replaced `foreignTax.credit` with `relief`: credit on becomes "foreign country credits US tax", credit off becomes
-  "none". Older files keep the flat method and the fixed Roth share, so their results don't change.
-- Saved files and exports always contain full inputs.
-- A field added after a file was saved is filled with the value that reproduces the version that saved it, not with
-  the current defaults. Cash-holding, foreign tax, and "spend benefits while working" are off for older files. The
-  one exception is the chained-CPI bracket gap (schema 6), which older files adopt. Schema 7 added checking and the
-  settling-in years; both default to off (0), so older files' results don't change.
-- Schema 8 restructured the accounts, and older files' results can change: the TSP gets one
-  return (the traditional TSP's, when the old per-account returns differed; a separate Roth return is dropped), the
-  brokerage keeps its own returns, IRAs start empty, and old conversion windows become traditional TSP → Roth TSP.
-  To keep a separate Roth return, move the Roth money to a Roth IRA with a transfer row.
-- Share links store only differences from the defaults, plus the defaults revision they were made with, so only links
-  of the current revision (9) can be rebuilt. The app says so when a link is older; plan files have every setting.
-
 ## Tests
 
 ```sh
@@ -571,21 +529,20 @@ node engine.test.js     # or open tests.html
 
 The suite covers SS claim factors (62 → 0.70, 64 → 0.80, 67 → 1.00, 70 → 1.24), FRA lookup, spousal excess and
 factors, provisional-income taxation, diet COLA, pension formula and 1.1% multiplier, MRA table, MRA+10 25%
-reduction and postponement, retirement types, supplement amount / end at 62 / zero for MRA+10 / earnings test,
+reduction and postponement, retirement types, supplement amount and service rounding / end at 62 / zero for MRA+10 / earnings test,
 survivor reduction and restoration, survivor annuity with COLA, the COLA start age, RMD ages and divisors, 2026 tax
 math, LTCG stacking, the NIIT on interest and gains, GS step increases (schedule, pay ratio, High-3 back-projection) and the pay cap, brokerage cost basis (deposits as basis, gains conserved through losses), IRAs (RMDs, the 10%
 penalty, Roth IRA contributions and basis, art. 20 covering only the TSP), conversions vs. untaxed transfers, one TSP
 return with separate IRA returns, filing-status switch, Roth bracket fill, conversion tax paid from taxable, withdrawal order,
 depletion, mass and cash conservation across eight scenarios (including stochastic, cash, and foreign tax), Monte Carlo
-reproducibility, SS break-even, input normalization, the cash account (v1 equivalence when off, cap, sweep,
+reproducibility, SS break-even, input normalization, the cash account (off, cap, sweep,
 drawn-first, interest taxed), foreign tax (Roth with no credit, credit offset, exemption, residency start, default
 income types), the plan report (every section present, one table row per year, no "undefined"/"NaN" text across
 seven household variants), chained-CPI bracket indexing, the per-year bracket range and headroom, bracket fill under
 double taxation (deterministic and random markets, no unfunded tax), and the year-row size limit (under 128 properties,
 which keeps V8 from building rows in its slow dictionary mode). Plan-file tests check that every setting has a
 control in its panel in the same order, that validation catches typos, wrong types, values that are not allowed and
-whole-number percents, that the review packet's settings file imports back to the same plan, and that old files and
-saved plans convert exactly. The test households are made up and frozen in the test file, so changing the defaults
+whole-number percents, and that the review packet's settings file imports back to the same plan. The test households are made up and frozen in the test file, so changing the defaults
 doesn't move the tests' numbers.
 
 ## License

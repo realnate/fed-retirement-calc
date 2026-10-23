@@ -176,7 +176,7 @@
       story.push(t);
       if (F.supplementEligible) {
         story.push(`The FERS supplement of ${usd(F.supplementMonthly)}/mo (fixed; no COLA) is paid from ${S.retireYear} through ${F.supplementEndYear - 1}. ` +
-          (SU.mode === 'manual' ? 'It is a manual amount.' : `It is estimated as Social Security at 62 from FERS earnings (${usd(F.ss62Today)}/mo in today's $) × ${Math.floor(F.service)} full years ÷ 40.`) +
+          (SU.mode === 'manual' ? 'It is a manual amount.' : `It is estimated as Social Security at 62 from FERS earnings (${usd(F.ss62Today)}/mo in today's $) × ${F.supplementYears} years of service (rounded to the nearest year) ÷ 40.`) +
           (E.afterRetiring.earnings > 0 ? ' Your post-retirement earnings are subject to its earnings test.' : ''));
       } else if (SU.mode === 'off') {
         story.push('The FERS supplement is switched off (a "supplement eliminated" scenario).');
@@ -480,7 +480,7 @@
     bullet('Age reduction', F.ageReduction > 0 ? `${pct(F.ageReduction)} (5%/yr under 62 at start)` : 'none');
     bullet('Survivor', `${electionText}; reduction applies while the spouse is alive and stops after the spouse dies; survivor annuity base = annuity after any age reduction, with COLAs`);
     bullet('COLA', 'diet COLA (CPI ≤2% → CPI; 2–3% → 2%; >3% → CPI−1%), from the year after age 62 for regular retirees; survivor annuities always');
-    if (F.supplementEligible) bullet('Supplement', `${usd(F.ss62Today)} today's $ inflated to ${S.retireYear} × ${Math.floor(F.service)}/40 = ${usd(F.supplementMonthly)}/mo; ends at 62; earnings test $1 per $2 over the SS limit ($24,480 in 2026, indexed)`);
+    if (F.supplementEligible) bullet('Supplement', `${usd(F.ss62Today)} today's $ inflated to ${S.retireYear} × ${F.supplementYears}/40 (years of service, rounded) = ${usd(F.supplementMonthly)}/mo; ends at 62; earnings test $1 per $2 over the SS limit ($24,480 in 2026, indexed)`);
     md.push('', '### Social Security');
     bullet('Your FRA / factor', `${ym(P1.fraMonths / 12)}; claiming at ${ym(P1.claimAge)} = ${pct(P1.factor)} of PIA (−5/9% per month for 36 months early, −5/12% beyond; +2/3% per month delayed to 70)`);
     if (P2) bullet('Spouse FRA / factor', `${ym(P2.fraMonths / 12)}; claiming at ${ym(P2.claimAge)} = ${pct(P2.factor)} of PIA`);

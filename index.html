@@ -512,6 +512,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     OPM, SSA, and IRS rules (see README.md for every assumption) and its projections depend entirely on your inputs. Confirm
     benefit figures with OPM (annuity estimates), SSA (my Social Security), and a qualified professional before making decisions.
     Statutory values reflect 2026 law as of October 2026.
+    Much of this calculator’s code was written by Claude, Anthropic’s AI model, at the author’s direction (see README.md).
   </div>
 </footer>
 <div class="pop" id="pop" hidden></div>
@@ -519,7 +520,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
 <script src="engine.js"></script>
-<script src="legacy.js"></script>
 <script src="report.js"></script>
 <script>
 'use strict';
@@ -719,7 +719,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     ] },
     { id: 'fersSupplement', title: 'FERS supplement', fields: [
       { p: 'fersSupplement.mode', label: 'Supplement', type: 'select', options: [['auto', 'Auto estimate'], ['manual', 'Manual amount'], ['off', 'Off (eliminated by Congress)']], tip: 'Paid only for immediate unreduced retirements (MRA+30, 60+20, special category) until age 62. No COLA.' },
-      { p: 'fersSupplement.ssAt62FromFersMonthly', label: 'SS at 62 from FERS earnings', type: 'money', min: 0, max: 5000, step: 5, suffix: '/mo', show: (i) => i.fersSupplement.mode === 'auto', tip: 'Social Security you would get at 62 from FERS-covered civilian earnings only (today’s $). Supplement = this × full years of FERS service ÷ 40. Set 0 to use 70% of your PIA.' },
+      { p: 'fersSupplement.ssAt62FromFersMonthly', label: 'SS at 62 from FERS earnings', type: 'money', min: 0, max: 5000, step: 5, suffix: '/mo', show: (i) => i.fersSupplement.mode === 'auto', tip: 'Social Security you would get at 62 from FERS-covered civilian earnings only (today’s $): the PIA reduced for claiming at 62, which is 70% of it for anyone born in 1960 or later. Supplement = this × years of FERS service (rounded to the nearest year, at most 40) ÷ 40. Set 0 to use 70% of your PIA.' },
       { type: 'button', label: 'Use 70% of my PIA', show: (i) => i.fersSupplement.mode === 'auto', onClick: () => { state.inputs.fersSupplement.ssAt62FromFersMonthly = Math.round(state.inputs.socialSecurity.you.piaMonthly * 0.7); afterChange(); } },
       { p: 'fersSupplement.manualMonthly', label: 'Monthly supplement', type: 'money', min: 0, max: 5000, step: 5, suffix: '/mo', show: (i) => i.fersSupplement.mode === 'manual', tip: 'In dollars of your retirement year.' },
       { type: 'info', id: 'suppInfo' },
@@ -1141,7 +1141,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     state.compareResult = null;
     if (state.compareName) {
       const sc = LS.get(KEY.scenarios, {})[state.compareName];
-      if (sc) { try { state.compareResult = RE.simulate(upgradeInputs(sc.inputs), { lite: true }); } catch (e) { console.error(e); } }
+      if (sc) { try { state.compareResult = RE.simulate(sc.inputs, { lite: true }); } catch (e) { console.error(e); } }
     }
     renderAll();
     LS.set(KEY.working, { name: state.scenarioName, inputs: inp });
@@ -2400,7 +2400,7 @@ self.onmessage = (e) => {
   function runComparison() {
     if (state.cmpRunning) return;
     const saved = LS.get(KEY.scenarios, {});
-    const list = [...state.cmpSel].map((n) => (n === CUR ? { name: `Current (${state.scenarioName || 'unsaved'})`, inputs: clone(state.inputs) } : saved[n] ? { name: n, inputs: upgradeInputs(saved[n].inputs) } : null)).filter(Boolean);
+    const list = [...state.cmpSel].map((n) => (n === CUR ? { name: `Current (${state.scenarioName || 'unsaved'})`, inputs: clone(state.inputs) } : saved[n] ? { name: n, inputs: saved[n].inputs } : null)).filter(Boolean);
     if (list.length < 2) { toast('Pick at least two plans to compare'); return; }
     const inp = state.inputs;
     state.cmpRunning = true; state.cmpStale = false;
@@ -2462,10 +2462,10 @@ self.onmessage = (e) => {
     const m = /[#&]s=([A-Za-z0-9_-]+)/.exec(location.hash);
     if (!m) return null;
     // Links store differences from the defaults they were made with, so only links of the current defaults revision
-    // can be rebuilt. Older links are refused rather than read against different defaults.
+    // can be rebuilt. Links made against other defaults are refused rather than misread.
     try {
-      const p = JSON.parse(b64d(m[1])), rev = p.d || 1;
-      if (rev !== RE.DEFAULTS_REVISION) return { old: true };
+      const p = JSON.parse(b64d(m[1]));
+      if (p.d !== RE.DEFAULTS_REVISION) return { old: true };
       return { name: p.n || 'Shared plan', inputs: RE.inputsFromDiff(p.i) };
     }
     catch (e) { console.warn('Bad scenario link', e); return null; }
@@ -2473,17 +2473,14 @@ self.onmessage = (e) => {
   // The plan file: how to read it (for people and AI assistants), then the settings in the input panels' order.
   const planFileText = () => JSON.stringify({ app: 'fers-retirement-planner', name: state.scenarioName, exported: new Date().toISOString().slice(0, 10),
     howToRead: RE.PLAN_GUIDE, inputs: state.inputs }, null, 2);
-  // After an import: an older format that was converted, or settings that were ignored, missing or not allowed.
-  function showImportNote(legacy, issues) {
+  // After an import: settings that were ignored, missing or not allowed.
+  function showImportNote(issues) {
     const box = $('#scNote');
-    if (!legacy && !issues.length) { box.hidden = true; box.innerHTML = ''; return; }
+    if (!issues.length) { box.hidden = true; box.innerHTML = ''; return; }
     const shown = issues.slice(0, 40);
-    // Older formats had a flat yearly step bump; it becomes GS step increases from the default step.
-    const steps = legacy && state.inputs.employment.addStepIncreases;
-    box.innerHTML = (legacy ? `<div>Converted from an older plan format. ${steps ? `Its yearly step bump is now GS step increases from step ${state.inputs.employment.currentStep}: set your current step under Employment.` : 'Every setting carried over.'}</div>` : '') +
-      (issues.length ? `<div><b>${issues.length} setting${issues.length > 1 ? 's' : ''} in the file ${issues.length > 1 ? 'need' : 'needs'} a look:</b></div><ul>` +
-        shown.map((x) => `<li><code>${esc(x.path || '(file)')}</code>: ${esc(x.problem)}</li>`).join('') +
-        (issues.length > shown.length ? `<li>…and ${issues.length - shown.length} more</li>` : '') + '</ul>' : '');
+    box.innerHTML = `<div><b>${issues.length} setting${issues.length > 1 ? 's' : ''} in the file ${issues.length > 1 ? 'need' : 'needs'} a look:</b></div><ul>` +
+      shown.map((x) => `<li><code>${esc(x.path || '(file)')}</code>: ${esc(x.problem)}</li>`).join('') +
+      (issues.length > shown.length ? `<li>…and ${issues.length - shown.length} more</li>` : '') + '</ul>';
     box.append(h('button', { type: 'button', class: 'btn small', onclick: () => { box.hidden = true; } }, 'Dismiss'));
     box.hidden = false;
   }
@@ -2501,10 +2498,8 @@ self.onmessage = (e) => {
     if (state.compareName && !all[state.compareName]) state.compareName = '';
     renderCmpPick();
   }
-  // Plans saved before schema 9 (older exports, saved scenarios, the working copy, old links) are converted by legacy.js.
-  const upgradeInputs = (raw) => (window.RetireLegacy ? window.RetireLegacy.upgrade(raw) : raw);
   function setInputs(inputs, name) {
-    state.inputs = RE.normalizeInputs(upgradeInputs(inputs));
+    state.inputs = RE.normalizeInputs(inputs);
     if (name !== undefined) { state.scenarioName = name; $('#scName').value = name; }
     state.mc = null; state.mcStale = false;
     syncControls();
@@ -2551,10 +2546,9 @@ self.onmessage = (e) => {
         let j;
         try { j = JSON.parse(rd.result); } catch (err) { toast('Could not read that JSON file'); return; }
         const raw = j && typeof j === 'object' && j.inputs ? j.inputs : j;
-        const legacy = !!(window.RetireLegacy && window.RetireLegacy.isLegacy(raw));
-        const issues = legacy ? [] : RE.validateInputs(raw);
+        const issues = RE.validateInputs(raw);
         setInputs(raw, (j && j.name) || f.name.replace(/\.json$/i, ''));
-        showImportNote(legacy, issues);
+        showImportNote(issues);
         toast('Imported scenario');
       };
       rd.readAsText(f); e.target.value = '';
@@ -2628,7 +2622,7 @@ self.onmessage = (e) => {
     if (oldLink) fromHash = null;
     const working = LS.get(KEY.working, null);
     if (fromHash) { state.inputs = fromHash.inputs; state.scenarioName = fromHash.name; }
-    else if (working && working.inputs) { state.inputs = RE.normalizeInputs(upgradeInputs(working.inputs)); state.scenarioName = working.name || 'My plan'; }
+    else if (working && working.inputs) { state.inputs = RE.normalizeInputs(working.inputs); state.scenarioName = working.name || 'My plan'; }
     else state.inputs = uiDefaults();
     $('#scName').value = state.scenarioName;
     buildPanels();
@@ -2637,7 +2631,7 @@ self.onmessage = (e) => {
     refreshScenarioLists();
     syncControls();
     recalc();
-    if (oldLink) toast('This link was made with an earlier version of the planner and can’t be opened. Ask for the exported plan file (Export JSON) instead.', 9000);
+    if (oldLink) toast('This link was made with a different version of the planner and can’t be opened. Ask for the exported plan file (Export JSON) instead.', 9000);
   }
   boot();
 })();

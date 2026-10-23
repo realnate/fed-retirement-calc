@@ -184,7 +184,9 @@
         partial: [0.05, 0.25],
         full: [0.10, 0.50],
       },
-      supplementDivisor: 40, // 5 USC 8421(b): SS-at-62 × (full years of FERS service ÷ 40).
+      // 5 USC 8421(b): SS-at-62 × years of FERS service ÷ 40, the years rounded to the nearest whole number (½ rounds up)
+      // and capped at 40.
+      supplementDivisor: 40,
       // 5 USC 8462(b): "diet COLA".
       dietCola: { lowCap: 0.02, highFloor: 0.03, haircut: 0.01 },
       fehbYearsRequired: 5, // 5 USC 8905(b)
@@ -205,7 +207,7 @@
   });
 
   // ---------------------------------------------------------------------------------------------
-  // Inputs (schema 9). Each top-level section is one input panel of the app, in the app's order, and nested objects
+  // Inputs. Each top-level section is one input panel of the app, in the app's order, and nested objects
   // are the groups inside a panel, so a plan file reads like the screen. PLAN_GUIDE (below) states the conventions:
   // rates, returns and shares are decimals; dollar amounts are today's dollars a year unless the name ends in Monthly
   // or a comment says otherwise; age-based changes happen at the start of the year the age is reached.
@@ -215,7 +217,7 @@
   function defaultInputs() {
     const ev = (at, label, amount, direction, extra) => ({ ...EVENT_DEFAULT, at, label, amount, direction, ...extra });
     return {
-      version: 9,
+      version: 1,
       household: {
         currentYear: 2026,
         you: { birthYear: 1982, lifespan: 95, sex: 'male' }, // sex selects the life table for stochastic lifespans
@@ -292,7 +294,7 @@
       fersSupplement: {
         mode: 'auto',
         // Today's $: Social Security at 62 from the FERS years' earnings only (28 years of about $95,000 ≈ 70% of a
-        // $2,700 PIA). 0 = 70% of your PIA.
+        // $2,700 PIA). 0 = 70% of your PIA, the age-62 benefit for anyone born in 1960 or later.
         ssAt62FromFersMonthly: 1900,
         manualMonthly: 1500, // dollars of your retirement year
       },
@@ -508,7 +510,7 @@
     out.version = INPUTS_VERSION;
     return out;
   }
-  const INPUTS_VERSION = 9;
+  const INPUTS_VERSION = 1;
 
   // What normalizeInputs would change or drop in a plan file: unknown settings, missing ones, wrong types, values that
   // are not allowed, whole-number percents, and conversion/transfer rows that are not one of MOVES.
@@ -558,9 +560,9 @@
   }
 
   // Revision of defaultInputs(). Share links store only the differences from the defaults, so they record the
-  // revision they were made against and only links of the current revision can be decoded. Revision 9 is the example
-  // household (schema 9).
-  const DEFAULTS_REVISION = 9;
+  // revision they were made against and only links of the current revision can be decoded. Raise it whenever a
+  // default changes.
+  const DEFAULTS_REVISION = 1;
   function overlay(base, diff) {
     if (diff === undefined) return base;
     if (Array.isArray(diff) || !diff || typeof diff !== 'object' || !base || typeof base !== 'object') return JSON.parse(JSON.stringify(diff));
@@ -672,8 +674,14 @@
     return round10(Math.max(0, 62 - startAge) * CONSTANTS.fers.mra10ReductionPerYear);
   }
 
-  function fersSupplementMonthly(ss62Monthly, fullYearsService) {
-    return ss62Monthly * Math.floor(fullYearsService + 1e-9) / CONSTANTS.fers.supplementDivisor;
+  // 5 USC 8421(b)(3): years of FERS service rounded to the nearest whole number (½ rounds up), at most 40.
+  function fersSupplementYears(service) {
+    return Math.min(CONSTANTS.fers.supplementDivisor, Math.round(Math.max(0, service) + 1e-9));
+  }
+
+  // ss62Monthly is the age-62 benefit, i.e. the PIA after the maximum early-claiming reduction (70% for births 1960+).
+  function fersSupplementMonthly(ss62Monthly, service) {
+    return ss62Monthly * fersSupplementYears(service) / CONSTANTS.fers.supplementDivisor;
   }
 
   // Taxable portion of Social Security (IRS Pub 915 worksheet). otherIncome = AGI excluding SS.
@@ -1029,8 +1037,8 @@
 
     // FERS supplement ----------------------------------------------------------------------------
     const suppEligible = SU.mode !== 'off' && rt.supplementEligible && E.retirementAge < 62 && pensionStartAge === E.retirementAge;
+    // 0 = 70% of your PIA: claiming at 62 with an FRA of 67 (births 1960+, so everyone who can still get the supplement).
     const ss62Today = SU.ssAt62FromFersMonthly > 0 ? SU.ssAt62FromFersMonthly : 0.70 * SS.you.piaMonthly;
-    const fullYears = Math.floor(service + 1e-9);
     let suppMonthly = null; // fixed when first paid (no COLA)
 
     // Conversions, transfers & bridge -------------------------------------------------------------
@@ -1042,7 +1050,7 @@
     const conversionFor = (age) => moveRows.find((w) => w.conversion && covers(w, age)) || null;
     const transfersFor = (age) => moveRows.filter((w) => !w.conversion && w.howMuch !== 'fillBracket' && covers(w, age));
     const idxAtRetireDet = Math.pow(1 + infl, retireYear - Y0);
-    const suppAnnualDet = suppEligible ? (SU.mode === 'manual' ? SU.manualMonthly * 12 : fersSupplementMonthly(ss62Today * idxAtRetireDet, fullYears) * 12) : 0;
+    const suppAnnualDet = suppEligible ? (SU.mode === 'manual' ? SU.manualMonthly * 12 : fersSupplementMonthly(ss62Today * idxAtRetireDet, service) * 12) : 0;
 
     // Bridge bucket: pre-funds the deterministic plan's net portfolio draws for the first `yearsCovered` years of retirement.
     const bucketPlan = opts.noBucket ? null : (opts.bucketPlan !== undefined ? opts.bucketPlan : computeBucketPlan(inp));
@@ -1234,7 +1242,7 @@
       if (suppEligible && youAlive && Y >= retireYear && ageY < 62) {
         if (suppMonthly === null) {
           const idxRet = retireYear >= Y0 ? idx : Math.pow(1 + infl, retireYear - Y0);
-          suppMonthly = SU.mode === 'manual' ? SU.manualMonthly : fersSupplementMonthly(ss62Today * idxRet, fullYears);
+          suppMonthly = SU.mode === 'manual' ? SU.manualMonthly : fersSupplementMonthly(ss62Today * idxRet, service);
         }
         const annual = suppMonthly * 12;
         const testApplies = !P.specialCategory || ageY >= mra;
@@ -1782,7 +1790,7 @@
         initialMonthlyToRetiree: initialAnnuity * (1 - survRed) / 12,
         supplementMonthly: suppMonthly !== null ? suppMonthly : (suppEligible ? suppAnnualDet / 12 : 0),
         supplementEndYear: suppEligible ? you.by + 62 : null,
-        ss62Today,
+        ss62Today, supplementYears: fersSupplementYears(service),
       },
       bucket: bucketPlan ? {
         fundYear: Math.max(bucketPlan.fundYear, Y0), retireYear: bucketPlan.retireYear, endYear: bucketPlan.endYear, rate: bucketPlan.g,
@@ -2416,7 +2424,7 @@
     compareScenarios, expandEvents, solveMaxSpending, solveEarliestRetirement, optimizePlan, sensitivityAnalysis, evaluatePlan,
     mraForBirthYear, mraMonthsForBirthYear, fraMonthsForBirthYear, rmdStartAge, rmdDivisor,
     ssClaimFactor, ssSpousalFactor, spousalExcess, dietCola,
-    fersRetirementType, fersMultiplier, fersBasicAnnuity, fersStartAge, fersAgeReduction, fersSupplementMonthly,
+    fersRetirementType, fersMultiplier, fersBasicAnnuity, fersStartAge, fersAgeReduction, fersSupplementYears, fersSupplementMonthly,
     taxableSocialSecurity, computeTaxes, bracketTop, federalBrackets, mulberry32, lognormalReturn, normalizeOrder, fmtAgeYM,
     ACCOUNT_NAMES, ACCOUNT_LABELS, MOVES, findMove, isConversion, moveKey, overlay,
   };

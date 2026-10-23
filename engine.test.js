@@ -8,7 +8,6 @@
   const isNode = typeof module === 'object' && module.exports && typeof require === 'function';
   const E = isNode ? require('./engine.js') : root.RetireEngine;
   const R = isNode ? require('./report.js') : root.RetireReport;
-  const L = isNode ? require('./legacy.js') : root.RetireLegacy;
   const results = [];
 
   function test(name, fn) {
@@ -23,24 +22,21 @@
   function ok(cond, label) { if (!cond) throw new Error(label || 'assertion failed'); }
   const clone = (o) => JSON.parse(JSON.stringify(o));
   // Test households. They are made up, and frozen here so the tests' numbers stay meaningful when the app's defaults
-  // change. V1 (schema 9) is the original example household; V1_FILE is the same household as a schema-1 file. Their
-  // salaries grow 2.01% a year with GS steps off: the 1% raise and the 1% flat step bump of the old example (1.01 × 1.01).
-  // The plan files below do the same.
-  const V1_PLAN = {"version": 9, "household": {"currentYear": 2026, "you": {"birthYear": 1983, "lifespan": 90, "sex": "male"}, "married": true, "spouse": {"birthYear": 1973, "lifespan": 86, "sex": "female"}, "planToAge": 95, "longevityStress": false, "monteCarloLifespans": "fixed"}, "inflation": {"rate": 0.03}, "employment": {"salary": 125000, "annualRaise": 0.0201, "addStepIncreases": false, "currentStep": 5, "yearsUntilNextStep": 1, "gsPayCap": 197200, "retirementAge": 57, "extraSavings": 0, "spendBenefitsThatStartBeforeRetiring": true, "afterRetiring": {"earnings": 0, "untilAge": 62}, "spouse": {"hasEarnings": false, "earnings": 0, "stopsAtAge": 62}}, "tsp": {"balances": {"traditional": 280000, "roth": 0, "rothBasisShare": 1}, "contributions": {"rate": 0.05, "rothShare": 0, "catchUp": false}, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.05}}, "iras": {"traditional": {"balance": 0, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.05}}, "roth": {"balance": 0, "basisShare": 1, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.07}, "contributionsWhileWorking": 0}}, "brokerage": {"balance": 0, "unrealizedGainShare": 0.5, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.05}}, "checkingAndMoneyMarket": {"checking": {"balance": 0, "keepInChecking": 0, "interestRate": 0}, "moneyMarket": {"balance": 0, "yield": 0, "keepSurplus": true, "moveToBrokerageAbove": 100000, "settlingInYears": 0}}, "withdrawals": {"strategy": "fixedOrder", "fillToTopOfBracket": 0.12, "oneTimeOutflowsFromRothFirst": false, "order": ["brokerage", "traditionalTsp", "rothTsp", "traditionalIra", "rothIra"], "bridgeBucket": {"enabled": false, "yearsCovered": 3, "buildYearsBeforeRetirement": 5, "return": 0.04}}, "fersPension": {"serviceYears": 30, "sickLeaveHours": 0, "high3Mode": "auto", "manualHigh3": 200000, "survivorElection": "partial", "averageSalaryYears": 3, "colaMode": "diet", "colaReducedBy": 0.01, "postponeToAge": 0, "specialCategory": false, "useOpmEstimate": false, "opmEstimateMonthly": 5000, "fehbYearsBeforeRetirement": 30}, "fersSupplement": {"mode": "auto", "ssAt62FromFersMonthly": 2000, "manualMonthly": 2100}, "socialSecurity": {"you": {"piaMonthly": 3100, "claimAge": 70, "claimExtraMonths": 0}, "spouse": {"piaMonthly": 1900, "claimAge": 67, "claimExtraMonths": 0}, "trustFundShortfall": {"benefitsPaidShare": 1, "fromYear": 2033}}, "spending": {"baseMonthly": 3800, "survivorShare": 0.7, "phases": {"enabled": false, "goGoUntilAge": 75, "goGoShare": 1, "slowGoUntilAge": 85, "slowGoShare": 0.9, "noGoShare": 0.85}, "healthcare": {"fehbMonthly": 0, "fehbSelfOnlyShare": 0.45, "inflation": 0.05, "medicarePartBYou": false, "medicarePartBSpouse": false, "partBMonthly": 202.9}, "oneTimeEvents": [{"label": "Sell house (net of selling costs)", "person": "household", "when": "year", "at": 2040, "repeat": "once", "everyNYears": 5, "through": 0, "forNYears": 2, "amount": 400000, "direction": "inflow", "taxed": "no", "inTodaysDollars": true, "deferrable": false}, {"label": "Buy smaller house", "person": "household", "when": "year", "at": 2040, "repeat": "once", "everyNYears": 5, "through": 0, "forNYears": 2, "amount": 330000, "direction": "outflow", "taxed": "no", "inTodaysDollars": true, "deferrable": false}, {"label": "Buy car", "person": "household", "when": "year", "at": 2040, "repeat": "once", "everyNYears": 5, "through": 0, "forNYears": 2, "amount": 25000, "direction": "outflow", "taxed": "no", "inTodaysDollars": true, "deferrable": false}], "foreignCurrency": {"enabled": false, "code": "MXN", "baseMonthly": 64750, "localPerUsd": 18.5, "annualDrift": 0}}, "taxes": {"mode": "advanced", "simpleRateJoint": 0.12, "simpleRateSingle": 0.15, "seniorDeduction": true, "bracketGrowthBelowInflation": 0.0025, "stateRate": 0, "heirsRate": 0.24, "conversionsAndTransfers": []}, "foreignTax": {"enabled": false, "country": "Mexico", "residentFromYear": 2040, "method": "flatRate", "isrIndexing": 0.035, "flatRate": 0.2, "flatExemptAmount": 0, "relief": "foreignCountryCreditsUsTax", "treatyArt20": false, "retirementIncomeExemption": false, "umaDailyMxn": 117.31, "umaMultiple": 15, "appliesTo": {"traditionalWithdrawals": true, "rothWithdrawals": true, "rothAmountTaxed": "fixedShare", "rothTaxedShare": 1, "rothConversions": true, "socialSecurity": false, "fersAnnuity": false, "fersSupplement": false, "brokerageGains": true, "interest": true, "earnedIncome": true}}, "monteCarlo": {"enabled": false, "runs": 1000, "seed": 20260101, "volatility": {"beforeRetirement": {"tsp": 0.15, "brokerage": 0.15, "traditionalIra": 0.15, "rothIra": 0.15}, "afterRetirement": {"tsp": 0.1, "brokerage": 0.1, "traditionalIra": 0.1, "rothIra": 0.1}}, "inflation": {"volatility": 0, "persistence": 0}, "adaptiveRules": {"earlySocialSecurity": {"enabled": false, "fromAge": 67, "throughAge": 69, "threshold": "shareOfPlan", "shareOfPlan": 0.8, "dollarAmount": 1000000}, "spendingGuardrails": {"enabled": false, "cutBelowShareOfPlan": 0.8, "restoreAboveShareOfPlan": 0.95, "spendingCut": 0.1, "deferEventsUpToYears": 3}}}};
-  const V1_FILE = {"version": 1, "household": {"currentYear": 2026, "youBirthYear": 1983, "youLifespan": 90, "hasSpouse": true, "spouseBirthYear": 1973, "spouseLifespan": 86, "planToAge": 95, "longevityStress": false}, "employment": {"salary": 125000, "raisePct": 0.0201, "stepBumpOn": false, "stepBumpPct": 0.01, "retireAge": 57, "spouseWorks": false, "spouseSalary": 0, "spouseRetireAge": 62, "extraSavings": 0, "postRetEarned": 0, "postRetEarnedUntilAge": 62}, "tsp": {"trad": 280000, "roth": 0, "taxable": 0, "contribPct": 0.05, "rothShare": 0, "catchUp": false, "returnPre": 0.07, "returnPost": 0.05, "inflation": 0.03, "withdrawalOrder": "taxable,trad,roth", "gainsPct": 0.5, "bridgeOn": false, "bridgeYears": 3, "bridgeStartYearsBefore": 5, "bridgeReturn": 0.04}, "pension": {"serviceYears": 30, "sickHours": 0, "high3Mode": "auto", "high3Manual": 200000, "overrideOn": false, "overrideMonthly": 5000, "survivorElection": "partial", "specialCategory": false, "startAge": 0, "fehbYears": 30}, "supplement": {"mode": "auto", "ss62Monthly": 2000, "manualMonthly": 2100}, "ss": {"youPia": 3100, "youClaimAge": 70, "youClaimMonths": 0, "spousePia": 1900, "spouseClaimAge": 67, "spouseClaimMonths": 0}, "spending": {"monthly": 3800, "phasesOn": false, "goGoUntil": 75, "slowGoUntil": 85, "goGoPct": 1, "slowGoPct": 0.9, "noGoPct": 0.85, "survivorPct": 0.7, "fehbMonthly": 0, "fehbSelfOnlyPct": 0.45, "healthInflation": 0.05, "partBYou": false, "partBSpouse": false, "partBMonthly": 202.9, "events": [{"when": "year", "at": 2040, "label": "Sell house (net of selling costs)", "amount": 400000, "dir": "in", "tax": "none", "real": true}, {"when": "year", "at": 2040, "label": "Buy smaller house", "amount": 330000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2040, "label": "Buy car", "amount": 25000, "dir": "out", "tax": "none", "real": true}], "currencyOn": false, "currencyCode": "MXN", "fxRate": 18.5, "fxDrift": 0, "monthlyForeign": 64750}, "taxes": {"mode": "advanced", "mfjRate": 0.12, "singleRate": 0.15, "stateRate": 0, "seniorDeduction": true}, "roth": {"mode": "off", "fixedAmount": 50000, "fromAge": 57, "toAge": 69, "bracketRate": 0.22}, "mc": {"on": false, "runs": 1000, "seed": 20260101, "sdPre": 0.15, "sdPost": 0.1, "inflationSd": 0}};
-  const V1 = () => E.normalizeInputs(clone(V1_PLAN));
-  // A Roth conversion window (schema v3); defaults match the old single block's ages 57–69, fill 22%.
+  // change. Their salaries grow 2.01% a year with GS step increases off.
+  const BASE_PLAN = {"version": 1, "household": {"currentYear": 2026, "you": {"birthYear": 1983, "lifespan": 90, "sex": "male"}, "married": true, "spouse": {"birthYear": 1973, "lifespan": 86, "sex": "female"}, "planToAge": 95, "longevityStress": false, "monteCarloLifespans": "fixed"}, "inflation": {"rate": 0.03}, "employment": {"salary": 125000, "annualRaise": 0.0201, "addStepIncreases": false, "currentStep": 5, "yearsUntilNextStep": 1, "gsPayCap": 197200, "retirementAge": 57, "extraSavings": 0, "spendBenefitsThatStartBeforeRetiring": true, "afterRetiring": {"earnings": 0, "untilAge": 62}, "spouse": {"hasEarnings": false, "earnings": 0, "stopsAtAge": 62}}, "tsp": {"balances": {"traditional": 280000, "roth": 0, "rothBasisShare": 1}, "contributions": {"rate": 0.05, "rothShare": 0, "catchUp": false}, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.05}}, "iras": {"traditional": {"balance": 0, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.05}}, "roth": {"balance": 0, "basisShare": 1, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.07}, "contributionsWhileWorking": 0}}, "brokerage": {"balance": 0, "unrealizedGainShare": 0.5, "returns": {"beforeRetirement": 0.07, "afterRetirement": 0.05}}, "checkingAndMoneyMarket": {"checking": {"balance": 0, "keepInChecking": 0, "interestRate": 0}, "moneyMarket": {"balance": 0, "yield": 0, "keepSurplus": true, "moveToBrokerageAbove": 100000, "settlingInYears": 0}}, "withdrawals": {"strategy": "fixedOrder", "fillToTopOfBracket": 0.12, "oneTimeOutflowsFromRothFirst": false, "order": ["brokerage", "traditionalTsp", "rothTsp", "traditionalIra", "rothIra"], "bridgeBucket": {"enabled": false, "yearsCovered": 3, "buildYearsBeforeRetirement": 5, "return": 0.04}}, "fersPension": {"serviceYears": 30, "sickLeaveHours": 0, "high3Mode": "auto", "manualHigh3": 200000, "survivorElection": "partial", "averageSalaryYears": 3, "colaMode": "diet", "colaReducedBy": 0.01, "postponeToAge": 0, "specialCategory": false, "useOpmEstimate": false, "opmEstimateMonthly": 5000, "fehbYearsBeforeRetirement": 30}, "fersSupplement": {"mode": "auto", "ssAt62FromFersMonthly": 2000, "manualMonthly": 2100}, "socialSecurity": {"you": {"piaMonthly": 3100, "claimAge": 70, "claimExtraMonths": 0}, "spouse": {"piaMonthly": 1900, "claimAge": 67, "claimExtraMonths": 0}, "trustFundShortfall": {"benefitsPaidShare": 1, "fromYear": 2033}}, "spending": {"baseMonthly": 3800, "survivorShare": 0.7, "phases": {"enabled": false, "goGoUntilAge": 75, "goGoShare": 1, "slowGoUntilAge": 85, "slowGoShare": 0.9, "noGoShare": 0.85}, "healthcare": {"fehbMonthly": 0, "fehbSelfOnlyShare": 0.45, "inflation": 0.05, "medicarePartBYou": false, "medicarePartBSpouse": false, "partBMonthly": 202.9}, "oneTimeEvents": [{"label": "Sell house (net of selling costs)", "person": "household", "when": "year", "at": 2040, "repeat": "once", "everyNYears": 5, "through": 0, "forNYears": 2, "amount": 400000, "direction": "inflow", "taxed": "no", "inTodaysDollars": true, "deferrable": false}, {"label": "Buy smaller house", "person": "household", "when": "year", "at": 2040, "repeat": "once", "everyNYears": 5, "through": 0, "forNYears": 2, "amount": 330000, "direction": "outflow", "taxed": "no", "inTodaysDollars": true, "deferrable": false}, {"label": "Buy car", "person": "household", "when": "year", "at": 2040, "repeat": "once", "everyNYears": 5, "through": 0, "forNYears": 2, "amount": 25000, "direction": "outflow", "taxed": "no", "inTodaysDollars": true, "deferrable": false}], "foreignCurrency": {"enabled": false, "code": "MXN", "baseMonthly": 64750, "localPerUsd": 18.5, "annualDrift": 0}}, "taxes": {"mode": "advanced", "simpleRateJoint": 0.12, "simpleRateSingle": 0.15, "seniorDeduction": true, "bracketGrowthBelowInflation": 0.0025, "stateRate": 0, "heirsRate": 0.24, "conversionsAndTransfers": []}, "foreignTax": {"enabled": false, "country": "Mexico", "residentFromYear": 2040, "method": "flatRate", "isrIndexing": 0.035, "flatRate": 0.2, "flatExemptAmount": 0, "relief": "foreignCountryCreditsUsTax", "treatyArt20": false, "retirementIncomeExemption": false, "umaDailyMxn": 117.31, "umaMultiple": 15, "appliesTo": {"traditionalWithdrawals": true, "rothWithdrawals": true, "rothAmountTaxed": "fixedShare", "rothTaxedShare": 1, "rothConversions": true, "socialSecurity": false, "fersAnnuity": false, "fersSupplement": false, "brokerageGains": true, "interest": true, "earnedIncome": true}}, "monteCarlo": {"enabled": false, "runs": 1000, "seed": 20260101, "volatility": {"beforeRetirement": {"tsp": 0.15, "brokerage": 0.15, "traditionalIra": 0.15, "rothIra": 0.15}, "afterRetirement": {"tsp": 0.1, "brokerage": 0.1, "traditionalIra": 0.1, "rothIra": 0.1}}, "inflation": {"volatility": 0, "persistence": 0}, "adaptiveRules": {"earlySocialSecurity": {"enabled": false, "fromAge": 67, "throughAge": 69, "threshold": "shareOfPlan", "shareOfPlan": 0.8, "dollarAmount": 1000000}, "spendingGuardrails": {"enabled": false, "cutBelowShareOfPlan": 0.8, "restoreAboveShareOfPlan": 0.95, "spendingCut": 0.1, "deferEventsUpToYears": 3}}}};
+  const BASE = () => E.normalizeInputs(clone(BASE_PLAN));
+  // A Roth conversion row: fill the 22% bracket, traditional TSP → Roth TSP, ages 57–69.
   const WIN = (o) => ({ fromAccount: 'traditionalTsp', toAccount: 'rothTsp', fromAge: 57, throughAge: 69, howMuch: 'fillBracket', fillToTopOfBracket: 0.22, fixedAmount: 50000, ...o });
-  const withInputs = (mut) => { const i = V1(); mut(i); return i; };
+  const withInputs = (mut) => { const i = BASE(); mut(i); return i; };
   // Foreign-tax settings: keys of foreignTax.appliesTo go there, the rest to foreignTax.
   const setForeign = (i, o) => { for (const [k, v] of Object.entries(o)) { if (k in i.foreignTax.appliesTo) i.foreignTax.appliesTo[k] = v; else i.foreignTax[k] = v; } };
   const NO_INCOME = { traditionalWithdrawals: false, rothWithdrawals: false, rothConversions: false, socialSecurity: false, fersAnnuity: false, fersSupplement: false, brokerageGains: false, interest: false, earnedIncome: false };
-  // A plan saved in schema 1 (flat-rate foreign tax, 15 one-time events), loaded through legacy.js — carries regression anchors.
-  const PLAN1_FILE = {"app": "fers-retirement-planner", "version": 1, "name": "Test plan 1", "inputs": {"version": 1, "household": {"currentYear": 2026, "youBirthYear": 1983, "youLifespan": 95, "hasSpouse": true, "spouseBirthYear": 1973, "spouseLifespan": 95, "planToAge": 95, "longevityStress": false}, "employment": {"salary": 125000, "raisePct": 0.0201, "stepBumpOn": false, "stepBumpPct": 0.01, "retireAge": 57, "spouseWorks": false, "spouseSalary": 0, "spouseRetireAge": 62, "extraSavings": 0, "spendBenefitsWhileWorking": true, "postRetEarned": 0, "postRetEarnedUntilAge": 62}, "tsp": {"trad": 280000, "roth": 2000, "taxable": 0, "contribPct": 0.05, "rothShare": 0, "catchUp": false, "returnPre": 0.07, "returnPost": 0.06, "inflation": 0.03, "withdrawalOrder": "taxable,trad,roth", "gainsPct": 0.5, "bridgeOn": false, "bridgeYears": 13, "bridgeStartYearsBefore": 5, "bridgeReturn": 0.04}, "cash": {"start": 0, "holdSurplus": true, "cap": 50000, "rate": 0}, "pension": {"serviceYears": 30, "sickHours": 0, "high3Mode": "auto", "high3Manual": 200000, "overrideOn": false, "overrideMonthly": 5000, "survivorElection": "partial", "specialCategory": false, "startAge": 0, "fehbYears": 30}, "supplement": {"mode": "auto", "ss62Monthly": 2000, "manualMonthly": 2100}, "ss": {"youPia": 3100, "youClaimAge": 70, "youClaimMonths": 0, "spousePia": 1900, "spouseClaimAge": 67, "spouseClaimMonths": 0}, "spending": {"monthly": 4800, "phasesOn": false, "goGoUntil": 75, "slowGoUntil": 85, "goGoPct": 1, "slowGoPct": 0.9, "noGoPct": 0.85, "survivorPct": 0.7, "fehbMonthly": 720, "fehbSelfOnlyPct": 0.45, "healthInflation": 0.06, "partBYou": false, "partBSpouse": false, "partBMonthly": 202.9, "events": [{"when": "year", "at": 2040, "label": "Sell house (net of selling costs)", "amount": 380000, "dir": "in", "tax": "none", "real": true}, {"when": "year", "at": 2040, "label": "Buy smaller house", "amount": 330000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2040, "label": "Buy car", "amount": 30000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2054, "label": "Replace car", "amount": 30000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2060, "label": "Replace car", "amount": 30000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2070, "label": "Replace car", "amount": 30000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2054, "label": "Major home repair (roof, AC, etc.)", "amount": 20000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2062, "label": "Major home repair (roof, AC, etc.)", "amount": 20000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2072, "label": "Major home repair (roof, AC, etc.)", "amount": 20000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2063, "label": "Long-term care reserve (spouse ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2073, "label": "Long-term care reserve (you ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2074, "label": "Long-term care reserve (you ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2075, "label": "Long-term care reserve (you ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2064, "label": "Long-term care reserve (spouse ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true}, {"when": "year", "at": 2065, "label": "Long-term care reserve (spouse ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true}], "currencyOn": false, "currencyCode": "MXN", "fxRate": 18.5, "fxDrift": 0, "monthlyForeign": 64750}, "taxes": {"mode": "advanced", "mfjRate": 0.12, "singleRate": 0.15, "stateRate": 0, "seniorDeduction": true}, "foreignTax": {"on": true, "country": "Mexico", "fromYear": 2041, "rate": 0.3, "exempt": 0, "credit": true, "trad": true, "roth": true, "rothShare": 1, "conversion": false, "ss": false, "fers": false, "supplement": false, "gains": true, "interest": true, "earned": true}, "roth": {"mode": "fill", "fixedAmount": 50000, "fromAge": 57, "toAge": 57, "bracketRate": 0.22}, "mc": {"on": true, "runs": 1000, "seed": 424242, "sdPre": 0.15, "sdPost": 0.15, "inflationSd": 0.015}}};
-  const PLAN1 = () => L.upgrade(clone(PLAN1_FILE.inputs));
-  // A plan saved in schema 4 (Mexico ISR, a money market, returns by account) — carries its own anchors.
-  const PLAN2_FILE = {"app": "fers-retirement-planner", "version": 1, "name": "Test plan 2", "inputs": {"version": 4, "household": {"currentYear": 2026, "youBirthYear": 1983, "youLifespan": 95, "hasSpouse": true, "spouseBirthYear": 1973, "spouseLifespan": 95, "planToAge": 95, "longevityStress": false, "mortality": "stochastic", "youSex": "male", "spouseSex": "female"}, "employment": {"salary": 125000, "raisePct": 0.0201, "stepBumpOn": false, "stepBumpPct": 0.01, "retireAge": 57, "spouseWorks": false, "spouseSalary": 0, "spouseRetireAge": 62, "extraSavings": 0, "spendBenefitsWhileWorking": true, "postRetEarned": 0, "postRetEarnedUntilAge": 62}, "tsp": {"trad": 280000, "roth": 2000, "taxable": 0, "rothBasisPct": 1, "contribPct": 0.05, "rothShare": 1, "catchUp": false, "returnPre": 0.07, "returnPost": 0.06, "inflation": 0.03, "withdrawalOrder": "taxable,trad,roth", "gainsPct": 0.5, "bridgeOn": false, "bridgeYears": 13, "bridgeStartYearsBefore": 5, "bridgeReturn": 0.04, "perAccountOn": true, "returnPostTrad": 0.05, "returnPostRoth": 0.07, "returnPostTaxable": 0.06}, "cash": {"start": 0, "holdSurplus": true, "cap": 100000, "rate": 0.035}, "pension": {"serviceYears": 30, "sickHours": 0, "high3Mode": "auto", "high3Manual": 200000, "overrideOn": false, "overrideMonthly": 5000, "survivorElection": "partial", "specialCategory": false, "startAge": 0, "fehbYears": 30}, "supplement": {"mode": "auto", "ss62Monthly": 2000, "manualMonthly": 2100}, "ss": {"youPia": 3100, "youClaimAge": 70, "youClaimMonths": 0, "spousePia": 1900, "spouseClaimAge": 67, "spouseClaimMonths": 0}, "spending": {"monthly": 4800, "phasesOn": false, "goGoUntil": 75, "slowGoUntil": 85, "goGoPct": 1, "slowGoPct": 0.9, "noGoPct": 0.85, "survivorPct": 0.7, "fehbMonthly": 720, "fehbSelfOnlyPct": 0.45, "healthInflation": 0.06, "partBYou": false, "partBSpouse": false, "partBMonthly": 202.9, "events": [{"when": "year", "at": 2040, "label": "Sell house (net of selling costs)", "amount": 380000, "dir": "in", "tax": "none", "real": true, "deferrable": false, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2040, "label": "Buy smaller house", "amount": 330000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2040, "label": "Buy car", "amount": 30000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2054, "label": "Replace car", "amount": 30000, "dir": "out", "tax": "none", "real": true, "deferrable": true, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2060, "label": "Replace car", "amount": 30000, "dir": "out", "tax": "none", "real": true, "deferrable": true, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2070, "label": "Replace car", "amount": 30000, "dir": "out", "tax": "none", "real": true, "deferrable": true, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2056, "label": "Major home repair (roof, AC, etc.)", "amount": 20000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2062, "label": "Major home repair (roof, AC, etc.)", "amount": 20000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2072, "label": "Major home repair (roof, AC, etc.)", "amount": 20000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "once", "every": 5, "until": 0, "count": 2}, {"when": "year", "at": 2063, "label": "Long-term care reserve (spouse ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "span", "every": 5, "until": 0, "count": 3}, {"when": "year", "at": 2073, "label": "Long-term care reserve (you ~90)", "amount": 50000, "dir": "out", "tax": "none", "real": true, "deferrable": false, "repeat": "span", "every": 5, "until": 0, "count": 3}], "currencyOn": false, "currencyCode": "MXN", "fxRate": 18.5, "fxDrift": 0.005, "monthlyForeign": 64750}, "taxes": {"mode": "advanced", "mfjRate": 0.12, "singleRate": 0.15, "stateRate": 0, "seniorDeduction": true, "heirRate": 0.24}, "foreignTax": {"on": true, "country": "Mexico", "fromYear": 2041, "method": "isr", "rate": 0.3, "exempt": 0, "isrIndex": 0.035, "relief": "mxCredit", "art20": false, "pensionExemptOn": false, "umaDaily": 117.31, "umaMultiple": 15, "trad": true, "roth": true, "rothMode": "share", "rothShare": 1, "conversion": true, "ss": false, "fers": false, "supplement": false, "gains": true, "interest": true, "earned": true}, "roth": {"windows": [{"fromAge": 57, "toAge": 57, "mode": "fill", "bracketRate": 0.24, "fixedAmount": 50000}]}, "mc": {"on": true, "runs": 1000, "seed": 424242, "sdPre": 0.15, "sdPost": 0.15, "inflationSd": 0.015, "inflationAR": 0.6, "sdPostTrad": 0.07, "sdPostRoth": 0.15, "sdPostTaxable": 0.15}, "rules": {"contingentSS": {"on": false, "fromAge": 67, "toAge": 69, "mode": "pct", "pct": 0.8, "abs": 1000000}, "guardrails": {"on": false, "lower": 0.8, "upper": 0.95, "cut": 0.1, "deferYears": 3}}}};
-  const PLAN2 = () => L.upgrade(clone(PLAN2_FILE.inputs));
+  // Plan 1: flat-rate foreign tax, 15 one-time events, Monte Carlo on. Carries regression anchors.
+  const PLAN1_PLAN = {"version":1,"household":{"currentYear":2026,"you":{"birthYear":1983,"lifespan":95,"sex":"male"},"married":true,"spouse":{"birthYear":1973,"lifespan":95,"sex":"female"},"planToAge":95,"longevityStress":false,"monteCarloLifespans":"fixed"},"inflation":{"rate":0.03},"employment":{"salary":125000,"annualRaise":0.0201,"addStepIncreases":false,"currentStep":5,"yearsUntilNextStep":1,"gsPayCap":197200,"retirementAge":57,"extraSavings":0,"spendBenefitsThatStartBeforeRetiring":true,"afterRetiring":{"earnings":0,"untilAge":62},"spouse":{"hasEarnings":false,"earnings":0,"stopsAtAge":62}},"tsp":{"balances":{"traditional":280000,"roth":2000,"rothBasisShare":1},"contributions":{"rate":0.05,"rothShare":0,"catchUp":false},"returns":{"beforeRetirement":0.07,"afterRetirement":0.06}},"iras":{"traditional":{"balance":0,"returns":{"beforeRetirement":0.07,"afterRetirement":0.06}},"roth":{"balance":0,"basisShare":1,"returns":{"beforeRetirement":0.07,"afterRetirement":0.07},"contributionsWhileWorking":0}},"brokerage":{"balance":0,"unrealizedGainShare":0.5,"returns":{"beforeRetirement":0.07,"afterRetirement":0.06}},"checkingAndMoneyMarket":{"checking":{"balance":0,"keepInChecking":0,"interestRate":0},"moneyMarket":{"balance":0,"yield":0,"keepSurplus":true,"moveToBrokerageAbove":50000,"settlingInYears":0}},"withdrawals":{"strategy":"fixedOrder","fillToTopOfBracket":0.12,"oneTimeOutflowsFromRothFirst":false,"order":["brokerage","traditionalTsp","rothTsp","traditionalIra","rothIra"],"bridgeBucket":{"enabled":false,"yearsCovered":13,"buildYearsBeforeRetirement":5,"return":0.04}},"fersPension":{"serviceYears":30,"sickLeaveHours":0,"high3Mode":"auto","manualHigh3":200000,"survivorElection":"partial","averageSalaryYears":3,"colaMode":"diet","colaReducedBy":0.01,"postponeToAge":0,"specialCategory":false,"useOpmEstimate":false,"opmEstimateMonthly":5000,"fehbYearsBeforeRetirement":30},"fersSupplement":{"mode":"auto","ssAt62FromFersMonthly":2000,"manualMonthly":2100},"socialSecurity":{"you":{"piaMonthly":3100,"claimAge":70,"claimExtraMonths":0},"spouse":{"piaMonthly":1900,"claimAge":67,"claimExtraMonths":0},"trustFundShortfall":{"benefitsPaidShare":1,"fromYear":2033}},"spending":{"baseMonthly":4800,"survivorShare":0.7,"phases":{"enabled":false,"goGoUntilAge":75,"goGoShare":1,"slowGoUntilAge":85,"slowGoShare":0.9,"noGoShare":0.85},"healthcare":{"fehbMonthly":720,"fehbSelfOnlyShare":0.45,"inflation":0.06,"medicarePartBYou":false,"medicarePartBSpouse":false,"partBMonthly":202.9},"oneTimeEvents":[{"label":"Sell house (net of selling costs)","person":"household","when":"year","at":2040,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":380000,"direction":"inflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Buy smaller house","person":"household","when":"year","at":2040,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":330000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Buy car","person":"household","when":"year","at":2040,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Replace car","person":"household","when":"year","at":2054,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Replace car","person":"household","when":"year","at":2060,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Replace car","person":"household","when":"year","at":2070,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Major home repair (roof, AC, etc.)","person":"household","when":"year","at":2054,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":20000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Major home repair (roof, AC, etc.)","person":"household","when":"year","at":2062,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":20000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Major home repair (roof, AC, etc.)","person":"household","when":"year","at":2072,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":20000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (spouse ~90)","person":"household","when":"year","at":2063,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (you ~90)","person":"household","when":"year","at":2073,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (you ~90)","person":"household","when":"year","at":2074,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (you ~90)","person":"household","when":"year","at":2075,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (spouse ~90)","person":"household","when":"year","at":2064,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (spouse ~90)","person":"household","when":"year","at":2065,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false}],"foreignCurrency":{"enabled":false,"code":"MXN","baseMonthly":64750,"localPerUsd":18.5,"annualDrift":0}},"taxes":{"mode":"advanced","simpleRateJoint":0.12,"simpleRateSingle":0.15,"seniorDeduction":true,"bracketGrowthBelowInflation":0.0025,"stateRate":0,"heirsRate":0.22,"conversionsAndTransfers":[{"fromAccount":"traditionalTsp","toAccount":"rothTsp","fromAge":57,"throughAge":57,"howMuch":"fillBracket","fillToTopOfBracket":0.22,"fixedAmount":50000}]},"foreignTax":{"enabled":true,"country":"Mexico","residentFromYear":2041,"method":"flatRate","isrIndexing":0.035,"flatRate":0.3,"flatExemptAmount":0,"relief":"foreignCountryCreditsUsTax","treatyArt20":false,"retirementIncomeExemption":false,"umaDailyMxn":117.31,"umaMultiple":15,"appliesTo":{"traditionalWithdrawals":true,"rothWithdrawals":true,"rothAmountTaxed":"fixedShare","rothTaxedShare":1,"rothConversions":false,"socialSecurity":false,"fersAnnuity":false,"fersSupplement":false,"brokerageGains":true,"interest":true,"earnedIncome":true}},"monteCarlo":{"enabled":true,"runs":1000,"seed":424242,"volatility":{"beforeRetirement":{"tsp":0.15,"brokerage":0.15,"traditionalIra":0.15,"rothIra":0.15},"afterRetirement":{"tsp":0.15,"brokerage":0.15,"traditionalIra":0.15,"rothIra":0.15}},"inflation":{"volatility":0.015,"persistence":0},"adaptiveRules":{"earlySocialSecurity":{"enabled":false,"fromAge":67,"throughAge":69,"threshold":"shareOfPlan","shareOfPlan":0.8,"dollarAmount":1000000},"spendingGuardrails":{"enabled":false,"cutBelowShareOfPlan":0.8,"restoreAboveShareOfPlan":0.95,"spendingCut":0.1,"deferEventsUpToYears":3}}}};
+  const PLAN1 = () => clone(PLAN1_PLAN);
+  // Plan 2: Mexico ISR, a money market, returns by account. Carries its own anchors.
+  const PLAN2_PLAN = {"version":1,"household":{"currentYear":2026,"you":{"birthYear":1983,"lifespan":95,"sex":"male"},"married":true,"spouse":{"birthYear":1973,"lifespan":95,"sex":"female"},"planToAge":95,"longevityStress":false,"monteCarloLifespans":"stochastic"},"inflation":{"rate":0.03},"employment":{"salary":125000,"annualRaise":0.0201,"addStepIncreases":false,"currentStep":5,"yearsUntilNextStep":1,"gsPayCap":197200,"retirementAge":57,"extraSavings":0,"spendBenefitsThatStartBeforeRetiring":true,"afterRetiring":{"earnings":0,"untilAge":62},"spouse":{"hasEarnings":false,"earnings":0,"stopsAtAge":62}},"tsp":{"balances":{"traditional":280000,"roth":2000,"rothBasisShare":1},"contributions":{"rate":0.05,"rothShare":1,"catchUp":false},"returns":{"beforeRetirement":0.07,"afterRetirement":0.05}},"iras":{"traditional":{"balance":0,"returns":{"beforeRetirement":0.07,"afterRetirement":0.06}},"roth":{"balance":0,"basisShare":1,"returns":{"beforeRetirement":0.07,"afterRetirement":0.07},"contributionsWhileWorking":0}},"brokerage":{"balance":0,"unrealizedGainShare":0.5,"returns":{"beforeRetirement":0.07,"afterRetirement":0.06}},"checkingAndMoneyMarket":{"checking":{"balance":0,"keepInChecking":0,"interestRate":0},"moneyMarket":{"balance":0,"yield":0.035,"keepSurplus":true,"moveToBrokerageAbove":100000,"settlingInYears":0}},"withdrawals":{"strategy":"fixedOrder","fillToTopOfBracket":0.12,"oneTimeOutflowsFromRothFirst":false,"order":["brokerage","traditionalTsp","rothTsp","traditionalIra","rothIra"],"bridgeBucket":{"enabled":false,"yearsCovered":13,"buildYearsBeforeRetirement":5,"return":0.04}},"fersPension":{"serviceYears":30,"sickLeaveHours":0,"high3Mode":"auto","manualHigh3":200000,"survivorElection":"partial","averageSalaryYears":3,"colaMode":"diet","colaReducedBy":0.01,"postponeToAge":0,"specialCategory":false,"useOpmEstimate":false,"opmEstimateMonthly":5000,"fehbYearsBeforeRetirement":30},"fersSupplement":{"mode":"auto","ssAt62FromFersMonthly":2000,"manualMonthly":2100},"socialSecurity":{"you":{"piaMonthly":3100,"claimAge":70,"claimExtraMonths":0},"spouse":{"piaMonthly":1900,"claimAge":67,"claimExtraMonths":0},"trustFundShortfall":{"benefitsPaidShare":1,"fromYear":2033}},"spending":{"baseMonthly":4800,"survivorShare":0.7,"phases":{"enabled":false,"goGoUntilAge":75,"goGoShare":1,"slowGoUntilAge":85,"slowGoShare":0.9,"noGoShare":0.85},"healthcare":{"fehbMonthly":720,"fehbSelfOnlyShare":0.45,"inflation":0.06,"medicarePartBYou":false,"medicarePartBSpouse":false,"partBMonthly":202.9},"oneTimeEvents":[{"label":"Sell house (net of selling costs)","person":"household","when":"year","at":2040,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":380000,"direction":"inflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Buy smaller house","person":"household","when":"year","at":2040,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":330000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Buy car","person":"household","when":"year","at":2040,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Replace car","person":"household","when":"year","at":2054,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":true},{"label":"Replace car","person":"household","when":"year","at":2060,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":true},{"label":"Replace car","person":"household","when":"year","at":2070,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":30000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":true},{"label":"Major home repair (roof, AC, etc.)","person":"household","when":"year","at":2056,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":20000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Major home repair (roof, AC, etc.)","person":"household","when":"year","at":2062,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":20000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Major home repair (roof, AC, etc.)","person":"household","when":"year","at":2072,"repeat":"once","everyNYears":5,"through":0,"forNYears":2,"amount":20000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (spouse ~90)","person":"household","when":"year","at":2063,"repeat":"eachYearForNYears","everyNYears":5,"through":0,"forNYears":3,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false},{"label":"Long-term care reserve (you ~90)","person":"household","when":"year","at":2073,"repeat":"eachYearForNYears","everyNYears":5,"through":0,"forNYears":3,"amount":50000,"direction":"outflow","taxed":"no","inTodaysDollars":true,"deferrable":false}],"foreignCurrency":{"enabled":false,"code":"MXN","baseMonthly":64750,"localPerUsd":18.5,"annualDrift":0.005}},"taxes":{"mode":"advanced","simpleRateJoint":0.12,"simpleRateSingle":0.15,"seniorDeduction":true,"bracketGrowthBelowInflation":0.0025,"stateRate":0,"heirsRate":0.24,"conversionsAndTransfers":[{"fromAccount":"traditionalTsp","toAccount":"rothTsp","fromAge":57,"throughAge":57,"howMuch":"fillBracket","fillToTopOfBracket":0.24,"fixedAmount":50000}]},"foreignTax":{"enabled":true,"country":"Mexico","residentFromYear":2041,"method":"mexicoIsr","isrIndexing":0.035,"flatRate":0.3,"flatExemptAmount":0,"relief":"foreignCountryCreditsUsTax","treatyArt20":false,"retirementIncomeExemption":false,"umaDailyMxn":117.31,"umaMultiple":15,"appliesTo":{"traditionalWithdrawals":true,"rothWithdrawals":true,"rothAmountTaxed":"fixedShare","rothTaxedShare":1,"rothConversions":true,"socialSecurity":false,"fersAnnuity":false,"fersSupplement":false,"brokerageGains":true,"interest":true,"earnedIncome":true}},"monteCarlo":{"enabled":true,"runs":1000,"seed":424242,"volatility":{"beforeRetirement":{"tsp":0.15,"brokerage":0.15,"traditionalIra":0.15,"rothIra":0.15},"afterRetirement":{"tsp":0.07,"brokerage":0.15,"traditionalIra":0.1,"rothIra":0.15}},"inflation":{"volatility":0.015,"persistence":0.6},"adaptiveRules":{"earlySocialSecurity":{"enabled":false,"fromAge":67,"throughAge":69,"threshold":"shareOfPlan","shareOfPlan":0.8,"dollarAmount":1000000},"spendingGuardrails":{"enabled":false,"cutBelowShareOfPlan":0.8,"restoreAboveShareOfPlan":0.95,"spendingCut":0.1,"deferEventsUpToYears":3}}}};
+  const PLAN2 = () => clone(PLAN2_PLAN);
   const planWith = (mut) => { const i = E.normalizeInputs(PLAN1()); mut(i); return i; };
   // Plan 2 with its Roth money in a Roth IRA. Its separate 7% post-retirement Roth return stood for Roth money held
   // in a Roth IRA after retiring: the Roth TSP moves there at 57 and the conversion goes there too.
@@ -135,10 +131,15 @@
   });
   test('Supplement: SS-at-62 $3,200/mo with 30 years → $2,400/mo', () => {
     near(E.fersSupplementMonthly(3200, 30), 2400, 1e-9);
-    near(E.fersSupplementMonthly(3200, 30.9), 2400, 1e-9, 'full years only');
+    near(E.fersSupplementMonthly(3200, 30.25), 2400, 1e-9, '30¼ years rounds to 30');
+    near(E.fersSupplementMonthly(3200, 30.5), 2480, 1e-9, '30½ years rounds up to 31 (5 USC 8421(b)(3))');
+    near(E.fersSupplementMonthly(3200, 30.9), 2480, 1e-9, '30.9 years rounds to 31');
+    near(E.fersSupplementMonthly(3200, 45), 3200, 1e-9, 'at most 40 years');
+    // OPM CSRS/FERS Handbook ch. 51 worked example: PIA $3,018.30 × 0.70 → $2,112; 33 years → $1,742/mo (OPM drops cents).
+    near(Math.floor(E.fersSupplementMonthly(2112, 33)), 1742, 0, 'OPM handbook example');
   });
   test('Supplement is paid until 62 and is zero from 62 on', () => {
-    const res = E.simulate(V1());
+    const res = E.simulate(BASE());
     const at = (age) => res.years.find((r) => r.ageYou === age);
     ok(at(57).supplement > 0, 'paid at 57');
     ok(at(61).supplement > 0, 'paid at 61');
@@ -180,7 +181,7 @@
     ok(after.colaApplied > 0, 'survivor annuity gets COLA');
   });
   test('Regular retiree COLA starts the year after turning 62', () => {
-    const res = E.simulate(V1());
+    const res = E.simulate(BASE());
     const at = (age) => res.years.find((r) => r.ageYou === age);
     near(at(62).colaApplied, 0, 0, 'none at 62');
     near(at(63).colaApplied, 0.02, 1e-12, 'diet COLA at 63 (CPI 3% → 2%)');
@@ -254,7 +255,7 @@
     near(E.rmdDivisor(75), 24.6);
     near(E.rmdDivisor(73), 26.5);
     near(E.rmdDivisor(100), 6.4);
-    const res = E.simulate(V1());
+    const res = E.simulate(BASE());
     const first = res.years.find((r) => r.rmd > 0);
     near(first.ageYou, 75, 0, 'first RMD at 75');
     near(first.rmd, first.startTrad / 24.6, 1e-6, 'RMD = balance / 24.6');
@@ -284,7 +285,7 @@
     near(r.federalTax - E.computeTaxes(ctx).federal, 0.038 * Math.min(r.cashInterest, r.agi - 250000), 0.01, 'the row\'s federal tax includes NIIT on the interest');
   });
   test('Filing status switches to single the year after the first death', () => {
-    const res = E.simulate(V1());
+    const res = E.simulate(BASE());
     const d = res.summary.firstDeathYear;
     ok(res.years.find((r) => r.year === d).status === 'mfj', 'MFJ in death year');
     ok(res.years.find((r) => r.year === d + 1).status === 'single', 'single next year');
@@ -353,12 +354,12 @@
     }
   }
   test('Mass conservation: start + contributions + growth − withdrawals = end (every year, every account)', () => {
-    checkConservation(E.simulate(V1()), 'defaults');
+    checkConservation(E.simulate(BASE()), 'defaults');
     checkConservation(E.simulate(withInputs((i) => { i.taxes.conversionsAndTransfers = [WIN({})]; i.brokerage.balance = 50000; i.tsp.balances.roth = 20000; })), 'fill');
     checkConservation(E.simulate(withInputs((i) => { i.spending.baseMonthly = 20000; i.tsp.balances.traditional = 100000; })), 'depletion');
     checkConservation(E.simulate(withInputs((i) => { i.withdrawals.bridgeBucket.enabled = true; i.spending.baseMonthly = 9000; i.tsp.contributions.catchUp = true; i.tsp.contributions.rothShare = 0.5; })), 'bridge');
     checkConservation(E.simulate(withInputs((i) => { i.household.married = false; i.spending.healthcare.medicarePartBYou = true; i.taxes.mode = 'simple'; })), 'single');
-    checkConservation(E.simulate(V1(), { rng: E.mulberry32(7) }), 'stochastic');
+    checkConservation(E.simulate(BASE(), { rng: E.mulberry32(7) }), 'stochastic');
     checkConservation(E.simulate(withInputs((i) => { i.checkingAndMoneyMarket.moneyMarket.balance = 80000; i.checkingAndMoneyMarket.moneyMarket.yield = 0.02; i.checkingAndMoneyMarket.moneyMarket.moveToBrokerageAbove = 50000; i.spending.baseMonthly = 8000; })), 'cash');
     checkConservation(E.simulate(withInputs((i) => { setForeign(i, { enabled: true, residentFromYear: 2030 }); i.taxes.conversionsAndTransfers = [WIN({})]; i.tsp.balances.roth = 200000; i.spending.baseMonthly = 9000; })), 'foreign');
     const chk = (i) => { Object.assign(i.checkingAndMoneyMarket.checking, { balance: 25000, keepInChecking: 10000, interestRate: 0.001 });
@@ -379,13 +380,13 @@
   });
 
   // --- Cash (checking) ------------------------------------------------------------------------------
-  test('With surplus held in cash turned off, results match the v1 (always reinvest) baseline', () => {
+  test('With surplus held in cash turned off, every surplus is reinvested', () => {
     const res = E.simulate(withInputs((i) => { i.checkingAndMoneyMarket.moneyMarket.keepSurplus = false; i.taxes.bracketGrowthBelowInflation = 0; }));
-    near(res.summary.endingBalance, 9972202, 1, 'ending balance (the v1-baseline engine gives $9,972,202)');
+    near(res.summary.endingBalance, 9972202, 1, 'ending balance');
     ok(res.years.every((r) => r.balCash === 0), 'no cash');
   });
   test('Surplus is held in cash up to the cap (today’s $); the rest is invested', () => {
-    const res = E.simulate(V1());
+    const res = E.simulate(BASE());
     ok(res.years.every((r) => r.balCash <= 100000 * r.idx + 0.01), 'cash never above cap');
     const r = res.years.find((y) => y.year === 2042);
     near(r.balCash, 100000 * r.idx, 0.01, 'cash at cap by 2042');
@@ -429,7 +430,7 @@
     ok(r.phase === 'Working' && r.ssSpouse > 0, 'spouse SS while working');
     near(r.deposit, r.ssSpouse - r.portfolioTax, 0.01, 'SS minus its tax is saved');
     ok(res.warnings.some((w) => w.code === 'incomeWhileWorking' && w.text.includes('2040')), 'note explains it');
-    ok(!E.simulate(V1()).warnings.some((w) => w.code === 'incomeWhileWorking'), 'no note for defaults');
+    ok(!E.simulate(BASE()).warnings.some((w) => w.code === 'incomeWhileWorking'), 'no note for defaults');
   });
 
   test('Lifetime totals: taxes add up and spending covers retired years', () => {
@@ -482,7 +483,7 @@
     ok(a.p10.nominal[20] <= a.p50.nominal[20] && a.p50.nominal[20] <= a.p90.nominal[20], 'ordered percentiles');
   });
   test('SS claim comparison break-even 62 vs 70 near age 80½', () => {
-    const cmp = E.ssClaimComparison(V1());
+    const cmp = E.ssClaimComparison(BASE());
     const be = cmp[0].breakEvens.find((b) => b.early === 62 && b.late === 70);
     ok(be && be.age > 79 && be.age < 82, 'break-even ' + (be && be.age));
   });
@@ -495,11 +496,11 @@
     ok(JSON.stringify(n.withdrawals.order) === JSON.stringify(['rothIra', 'brokerage', 'traditionalTsp', 'rothTsp', 'traditionalIra']), 'order: a string is accepted, unknown names dropped, missing ones appended');
     const w = n.taxes.conversionsAndTransfers[0];
     ok(w.howMuch === 'fillBracket' && w.fillToTopOfBracket === 0.22 && w.throughAge === 62, 'row fields default individually');
-    const d = clone(V1());
+    const d = clone(BASE());
     ok(JSON.stringify(E.normalizeInputs(d)) === JSON.stringify(d), 'idempotent');
   });
 
-  // --- Phase 1: defaults, compatibility, anchors ------------------------------------------------------
+  // --- Defaults and regression anchors ----------------------------------------------------------------
   test('Regression anchors hold for plan 1 (worked by hand)', () => {
     const res = E.simulate(PLAN1());
     // 2026 wages $125,000 less the 5% traditional contribution, minus the $32,200 deduction: 10% to $24,800, then 12%.
@@ -512,25 +513,14 @@
     near(E.ssClaimFactor(70, 804), 1.24); near(E.ssClaimFactor(67, 804), 1.0); near(E.ssClaimFactor(62, 804), 0.7);
     const rmd = res.years.find((y) => y.rmd > 0);
     ok(rmd.ageYou === 75, 'RMD at 75'); near(rmd.rmd, rmd.startTrad / 24.6, 1e-6, 'RMD = prior balance / 24.6');
+    near(E.simulate(planWith((i) => { i.taxes.bracketGrowthBelowInflation = 0; })).summary.endingBalance, 2434284, 1, 'ending balance (brackets indexed at full inflation)');
   });
-  test('Defaults are the example household (revision 9); the schema-8 template maps onto them (legacy.js)', () => {
+  test('Defaults are the example household', () => {
     const d = E.defaultInputs();
-    near(E.DEFAULTS_REVISION, 9);
     ok(d.household.you.birthYear === 1982 && d.employment.salary === 101443 && d.employment.retirementAge === 62 && d.fersPension.serviceYears === 28,
       'a GS-12 (step 5, Rest of U.S.) ten years in, retiring at 62 with 28 years');
-    ok(JSON.stringify(E.normalizeInputs(L.upgrade(L.schema8Defaults()))) === JSON.stringify(d), 'the schema-8 template is the same household');
     const S = E.simulate(d).summary;
     ok(S.fers.rule === '62+5' && S.fers.multiplier === 0.011 && S.depletionYear === null, 'immediate annuity at the 1.1% multiplier; the projection never runs short');
-  });
-  test('Fields missing from older files reproduce the behavior of the version that saved them', () => {
-    // A schema-1 file has no money market, foreign tax, "spend benefits while working" or chained-CPI gap.
-    const old = clone(V1_FILE);
-    ok(!old.cash && !old.foreignTax && !('spendBenefitsWhileWorking' in old.employment) && !('taxIndexGap' in old.taxes), 'a schema-1 file');
-    const n = E.normalizeInputs(L.upgrade(old));
-    ok(n.checkingAndMoneyMarket.moneyMarket.keepSurplus === false && n.foreignTax.enabled === false && n.employment.spendBenefitsThatStartBeforeRetiring === false, 'neutral fill-ins');
-    // Deliberate exception: chained-CPI bracket indexing corrects an assumption, so older files adopt it.
-    ok(n.taxes.bracketGrowthBelowInflation === 0.0025, 'older files get the chained-CPI gap');
-    near(E.simulate({ ...n, taxes: { ...n.taxes, bracketGrowthBelowInflation: 0 } }).summary.endingBalance, 9972202, 1, 'v1-baseline result (gap 0): the v1-baseline engine gives $9,972,202');
   });
   test('Share links rebuild from the current defaults', () => {
     const c = E.inputsFromDiff({ spending: { baseMonthly: 4000 } });
@@ -539,9 +529,9 @@
     ok(JSON.stringify(E.inputsFromDiff({})) === JSON.stringify(E.defaultInputs()), 'an empty diff is the defaults');
   });
 
-  // --- Phase 1.1 cash-flow check --------------------------------------------------------------------------
+  // --- Cash-flow check ------------------------------------------------------------------------------------
   test('Cash-flow check is ~0 in every year (deterministic and Monte Carlo)', () => {
-    const cases = [PLAN1(), V1(), planWith((i) => { i.withdrawals.bridgeBucket.enabled = true; }), planWith((i) => { i.spending.baseMonthly = 15000; }),
+    const cases = [PLAN1(), BASE(), planWith((i) => { i.withdrawals.bridgeBucket.enabled = true; }), planWith((i) => { i.spending.baseMonthly = 15000; }),
       withInputs((i) => { i.employment.retirementAge = 62; i.employment.spendBenefitsThatStartBeforeRetiring = false; i.checkingAndMoneyMarket.moneyMarket.balance = 30000; i.checkingAndMoneyMarket.moneyMarket.yield = 0.02; })];
     for (const inp of cases) {
       const res = E.simulate(inp);
@@ -552,7 +542,7 @@
     for (let k = 0; k < 20; k++) for (const r of E.simulate(PLAN1(), { rng, bucketPlan: null }).years) near(r.cashCheck, 0, 1, 'MC check');
   });
 
-  // --- Phase 1.3 bridge bucket ------------------------------------------------------------------------------
+  // --- Bridge bucket ----------------------------------------------------------------------------------------
   test('Bridge bucket is funded at the present value of planned draws and spent first', () => {
     const inp = planWith((i) => { i.withdrawals.bridgeBucket.enabled = true; i.withdrawals.bridgeBucket.yearsCovered = 13; i.withdrawals.bridgeBucket.buildYearsBeforeRetirement = 5; i.withdrawals.bridgeBucket.return = 0.04; });
     const plan = E.computeBucketPlan(inp);
@@ -582,7 +572,7 @@
     checkConservation(res, 'bucket MC');
   });
 
-  // --- Phase 1.4 senior deduction --------------------------------------------------------------------------
+  // --- Senior deduction ------------------------------------------------------------------------------------
   test('Senior deduction applies only in 2025–2028 and is never indexed', () => {
     const base = { ordinary: 100000, ltcg: 0, ss: 0, status: 'mfj', nOver65: 2, scale: 1 };
     const d = (year, extra) => E.computeTaxes({ ...base, year, ...extra }).seniorDeduction;
@@ -593,7 +583,7 @@
     near(d(2026, { seniorDeduction: false }), 0, 0, 'toggle off');
   });
 
-  // --- Phase 1.5 core withdrawal rate ----------------------------------------------------------------------
+  // --- Core withdrawal rate --------------------------------------------------------------------------------
   test('Core withdrawal rate excludes one-time events and conversion tax', () => {
     const res = E.simulate(PLAN1());
     const y = (k) => res.years.find((x) => x.year === k);
@@ -607,22 +597,7 @@
     ok(res.summary.peakCoreWithdrawalRate < res.summary.peakWithdrawalRate, 'peak core below peak all-in');
   });
 
-  // --- Phase 2: schema, mortality, inflation, rules, Monte Carlo metrics ------------------------------------
-  test('Schema: version-1 files migrate with neutral new fields and unchanged results', () => {
-    ok(E.defaultInputs().version === 9 && E.INPUTS_VERSION === 9, 'version 9');
-    ok(L.isLegacy(PLAN1_FILE.inputs) && !L.isLegacy(E.defaultInputs()) && !L.isLegacy({ tsp: {}, socialSecurity: {} }) && L.isLegacy({ ss: {}, pension: {} }), 'old files are told apart, with or without a version');
-    const n = E.normalizeInputs(L.upgrade(clone(PLAN1_FILE.inputs)));
-    ok(n.fersPension.averageSalaryYears === 3 && n.fersPension.colaMode === 'diet' && n.socialSecurity.trustFundShortfall.benefitsPaidShare === 1 && n.withdrawals.strategy === 'fixedOrder' && !n.withdrawals.oneTimeOutflowsFromRothFirst && n.spending.oneTimeEvents.every((e) => e.person === 'household'), 'v5 fields neutral');
-    ok(n.version === 9 && n.household.monteCarloLifespans === 'fixed' && n.monteCarlo.inflation.persistence === 0, 'migrated');
-    ok(n.foreignTax.method === 'flatRate' && n.foreignTax.relief === 'foreignCountryCreditsUsTax' && n.foreignTax.appliesTo.rothAmountTaxed === 'fixedShare' && !('credit' in n.foreignTax), 'v3 Mexico settings → flat, Mexico credits US, Roth share');
-    const raw = clone(PLAN1_FILE.inputs);
-    const off = E.normalizeInputs(L.upgrade({ ...raw, foreignTax: { ...raw.foreignTax, credit: false } }));
-    ok(off.foreignTax.relief === 'none', 'credit off → no relief');
-    ok(!n.monteCarlo.adaptiveRules.earlySocialSecurity.enabled && !n.monteCarlo.adaptiveRules.spendingGuardrails.enabled && n.spending.oneTimeEvents.every((e) => e.deferrable === false), 'rules off, events not deferrable');
-    // The Phase 1 engine gives $2,423,299. Cost-basis tracking realizes $13,626 of gain on the one brokerage withdrawal
-    // (2064) instead of a flat 50% ($26,915), so less tax and a larger ending balance.
-    near(E.simulate({ ...PLAN1(), taxes: { ...PLAN1().taxes, bracketGrowthBelowInflation: 0 } }).summary.endingBalance, 2434284, 1, 'deterministic result unchanged from Phase 1 (gap 0, basis tracked)');
-  });
+  // --- Mortality, inflation, adaptive rules, Monte Carlo metrics --------------------------------------------
   test('Life table: SSA 2023 period table, ages 0–119, sampler matches life expectancy', () => {
     const M = E.CONSTANTS.mortality;
     ok(M.male.length === 120 && M.female.length === 120 && M.male.every((q) => q > 0 && q <= 1), 'table shape');
@@ -632,7 +607,7 @@
     near(meanLife('female', 55, 20000), M.eFemale55, 0.35, 'female at 55');
   });
   test('Sampled death years drive survivor phase, filing, survivor annuity and SS, spending and RMDs', () => {
-    const res = E.simulate(V1(), { deathYears: { you: 2052, spouse: 2082 }, toLastDeath: true });
+    const res = E.simulate(BASE(), { deathYears: { you: 2052, spouse: 2082 }, toLastDeath: true });
     ok(res.summary.endYear === 2082, 'runs to the last death');
     const a = res.years.find((y) => y.year === 2052), b = res.years.find((y) => y.year === 2053);
     ok(a.status === 'mfj' && b.status === 'single' && b.phase === 'Survivor', 'filing and phase');
@@ -718,7 +693,7 @@
     }
   });
 
-  // --- Phase 3: events, Roth windows, inheritance, per-account returns, comparison, IRMAA -------------------
+  // --- Events, conversions, inheritance, returns by account, comparison, IRMAA ------------------------------
   test('Recurring and multi-year events expand to the right years', () => {
     const ys = (e) => E.expandEvents([{ ...e, label: 'x', amount: 1, direction: 'outflow' }], 1983).map((o) => o.year);
     ok(JSON.stringify(ys({ when: 'year', at: 2054, repeat: 'everyNYears', everyNYears: 6, through: 2072 })) === '[2054,2060,2066,2072]', 'every 6 through 2072');
@@ -741,12 +716,7 @@
     const out = (y) => res.years.find((x) => x.year === y).oneTimeOut;
     ok(out(2042) > 0 && out(2044) === 0 && out(2045) > 0 && out(2046) > 0 && out(2048) > 0, 'only the 2044 occurrence is deferred, by one year');
   });
-  test('Conversion rows: the old single Roth block migrates; two rows fill their own brackets; the first row wins', () => {
-    const m = (roth) => E.normalizeInputs(L.upgrade({ ...clone(PLAN1_FILE.inputs), roth })).taxes.conversionsAndTransfers;
-    ok(JSON.stringify(m({ mode: 'fill', fixedAmount: 50000, fromAge: 57, toAge: 57, bracketRate: 0.22 })) === JSON.stringify([WIN({ throughAge: 57 })]), 'fill block → one row (traditional → Roth TSP)');
-    ok(m({ mode: 'off', fromAge: 57, toAge: 69 }).length === 0, 'off → no rows');
-    const part = m({ toAge: 60 });
-    ok(part.length === 1 && part[0].throughAge === 60 && part[0].fillToTopOfBracket === 0.22, 'a partial old block takes the rest from the old defaults');
+  test('Conversion rows: two rows fill their own brackets; the first row wins', () => {
     const inp = withInputs((i) => { i.tsp.balances.traditional = 1500000; i.taxes.conversionsAndTransfers = [WIN({ fromAge: 57, throughAge: 57, fillToTopOfBracket: 0.24 }), WIN({ fromAge: 60, throughAge: 62, fillToTopOfBracket: 0.12 }), WIN({ fromAge: 62, throughAge: 62, fillToTopOfBracket: 0.35 })]; });
     const res = E.simulate(inp);
     const y = (k) => res.years.find((x) => x.year === k);
@@ -788,14 +758,6 @@
     ok(rank((r) => r.returnTsp) === rank((r) => r.ira.roth.ret) && rank((r) => r.returnTsp) === rank((r) => r.returnTaxable), 'one market shock orders the years identically');
     checkConservation(mc, 'account returns');
   });
-  test('Older files: the TSP takes the traditional return; old windows convert traditional TSP → Roth TSP (legacy.js)', () => {
-    const n = E.normalizeInputs(PLAN2());
-    ok(n.tsp.returns.afterRetirement === 0.05 && n.brokerage.returns.afterRetirement === 0.06 && n.brokerage.returns.beforeRetirement === 0.07 && n.monteCarlo.volatility.afterRetirement.tsp === 0.07, 'traditional TSP return and volatility');
-    ok(n.withdrawals.order.join() === 'brokerage,traditionalTsp,rothTsp,traditionalIra,rothIra', 'IRAs appended to the withdrawal order');
-    ok(n.taxes.conversionsAndTransfers.length === 1 && n.taxes.conversionsAndTransfers[0].fromAccount === 'traditionalTsp' && n.taxes.conversionsAndTransfers[0].toAccount === 'rothTsp', 'row: traditional → Roth TSP');
-    const v1 = E.normalizeInputs(PLAN1());
-    ok(v1.brokerage.returns.afterRetirement === v1.tsp.returns.afterRetirement && v1.monteCarlo.volatility.afterRetirement.brokerage === v1.monteCarlo.volatility.afterRetirement.tsp && v1.monteCarlo.volatility.beforeRetirement.rothIra === v1.monteCarlo.volatility.beforeRetirement.tsp, 'one return for everything stays one return');
-  });
   test('Scenario comparison matches standalone runs at the same seed', () => {
     const a = PLAN1(), b = planWith((i) => { i.spending.baseMonthly = 6000; });
     const cmp = E.compareScenarios([{ name: 'A', inputs: a }, { name: 'B', inputs: b }], { runs: 120, seed: 9, mode: 'fixed' });
@@ -813,7 +775,7 @@
     ok(res.warnings.some((w) => /IRMAA/.test(w.text) && /\$[\d,]+ extra/.test(w.text)), 'warning states dollars');
   });
 
-  // --- Phase 4: Mexico tax engine --------------------------------------------------------------------------
+  // --- Mexico tax engine -----------------------------------------------------------------------------------
   const MX = (ft, mut) => planWith((i) => { setForeign(i, { enabled: true, residentFromYear: 2040, method: 'mexicoIsr', relief: 'none', isrIndexing: 0.035, ...NO_INCOME, ...ft }); if (mut) mut(i); });
   test('ISR 2026 annual tariff: continuous brackets and known amounts', () => {
     const t = E.CONSTANTS.mexico.isrAnnual;
@@ -1098,7 +1060,7 @@
     const scenarios = [
       PLAN1(),
       planWith((i) => { i.withdrawals.bridgeBucket.enabled = true; }),
-      V1(),
+      BASE(),
       withInputs((i) => { i.household.married = false; }),
       withInputs((i) => { i.spending.baseMonthly = 20000; i.tsp.balances.traditional = 100000; }),
       withInputs((i) => { i.foreignTax.enabled = true; i.taxes.conversionsAndTransfers = [WIN({})]; i.spending.foreignCurrency.enabled = true; i.checkingAndMoneyMarket.moneyMarket.balance = 20000; i.checkingAndMoneyMarket.moneyMarket.yield = 0.01; }),
@@ -1130,7 +1092,7 @@
       }
     });
   });
-  test('Plan report includes Phase 3 inputs, inheritance, IRMAA and a comparison', () => {
+  test('Plan report includes events, conversions, IRAs, inheritance, IRMAA and a comparison', () => {
     const inp = planWith((i) => { i.taxes.conversionsAndTransfers.push(WIN({ fromAge: 71, throughAge: 74, fillToTopOfBracket: 0.12 })); i.iras.roth.balance = 20000;
       i.spending.oneTimeEvents.push({ when: 'year', at: 2040, label: 'Travel', amount: 8000, direction: 'outflow', taxed: 'no', inTodaysDollars: true, repeat: 'everyNYears', everyNYears: 2, through: 2050 }); });
     const res = E.simulate(inp);
@@ -1203,8 +1165,8 @@
     ok(tx({ ordinary: 50000, mode: 'simple', simpleMfj: 0.12 }).bracket === null, 'simple mode: no bracket');
   });
   test('Fill conversions land at the bracket top even with double taxation (no relief) and taxes paid from traditional', () => {
-    // These settings used to oscillate (conversion sized from the previous pass's tax withdrawal) and stop off target,
-    // leaving spurious unfunded amounts that Monte Carlo counted as failures.
+    // These settings oscillate if the conversion is sized from the previous pass's tax withdrawal, stopping off target
+    // and leaving spurious unfunded amounts that Monte Carlo would count as failures.
     const inp = PLAN2_TIED();
     inp.taxes.conversionsAndTransfers = [{ fromAge: 57, throughAge: 66, howMuch: 'fillBracket', fillToTopOfBracket: 0.24, fixedAmount: 0 }];
     setForeign(inp, { residentFromYear: 2030, relief: 'none', rothConversions: true });
@@ -1224,7 +1186,7 @@
     ok(years > 20, 'conversion years checked');
   });
   test('Taxable account tracks cost basis: money deposited is basis, only its growth is gain', () => {
-    // A home sale parked in the taxable account and spent the next year used to be taxed as 50% gain by both countries.
+    // A home sale parked in the taxable account and spent the next year is basis coming back, not gain, in both countries.
     const ev = { when: 'year', taxed: 'no', inTodaysDollars: true, deferrable: false, repeat: 'once', everyNYears: 5, through: 0, forNYears: 2, person: 'household' };
     const inp = PLAN2_TIED();
     inp.spending.oneTimeEvents = [{ ...ev, at: 2041, label: 'Sell home', amount: 400000, direction: 'inflow' }, { ...ev, at: 2042, label: 'Buy home', amount: 400000, direction: 'outflow' }];
