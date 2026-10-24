@@ -4,7 +4,7 @@ A self-contained, client-side retirement cash-flow calculator for US federal emp
 Either spouse (or both) can be a federal employee. For each person it projects pay, a workplace plan (the TSP, or a
 401(k)-style plan for anyone else), traditional and Roth IRAs, the FERS annuity and supplement or another pension, and
 Social Security. For the household it adds brokerage investments, checking and a money market account, federal and
-state income tax, RMDs, Roth conversions and account transfers, survivor scenarios, and an optional Monte Carlo run.
+state, local and foreign income tax, RMDs, Roth conversions and account transfers, survivor scenarios, and an optional Monte Carlo run.
 
 > **Educational estimate only — not financial, tax, investment, or legal advice.** Confirm annuity figures with OPM,
 > Social Security estimates with SSA, and decisions with a qualified professional.
@@ -33,7 +33,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 
 1. **Inputs (left column).** Panels are collapsible: Household, Inflation, Employment, TSP / 401(k), IRAs, Brokerage
    investments, Checking & money market, Withdrawals, FERS pension, FERS supplement, Other pension, Social Security,
-   Spending, Taxes (with conversions and transfers), Foreign tax and Monte Carlo. Panels about one person (Employment,
+   Spending, Taxes (with conversions and transfers), State, local & foreign tax, and Monte Carlo. Panels about one person (Employment,
    TSP / 401(k), IRAs, FERS pension, FERS supplement, Other pension) have a **You | Spouse** switch at the top; every
    such panel shows the same person, and the switch disappears for a single household. "Federal employee (FERS)" under
    Employment decides whether that person's plan is the TSP and whether the FERS panels or Other pension apply. Each
@@ -91,7 +91,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
      median is lower or higher and why: volatile returns compound to less than the average, stochastic lifespans move
      the year the money is left, and adaptive rules apply only in Monte Carlo.
    - **Sensitivity** moves one assumption at a time (returns, volatility, inflation, healthcare inflation, spending,
-     your retirement age, Social Security 78% from 2033, FERS COLA, supplement, lifespans, Mexico tax, peso drift). It shows
+     your retirement age, Social Security 78% from 2033, FERS COLA, supplement, lifespans, state/local/foreign tax, currency drift). It shows
      a tornado chart of success or median inheritance (today's dollars), with a table.
 8. **Compare scenarios** runs 2–4 plans (saved scenarios and/or the current inputs). Each runs deterministically and in
    both Monte Carlo lifespan modes, at the current inputs' seed and run count. The results appear in a side-by-side
@@ -103,7 +103,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 - **Summary cards:** the workplace plans (TSP / 401(k), both spouses') at your retirement and when RMDs start; left to
   heirs (the ending balance, in future and today's dollars, with the pre-tax traditional share; real estate is not included); lifetime spending (living + healthcare in
   retired years, plus one-time outflows); depletion age or "Never"; peak withdrawal rate; lifetime income taxes
-  (federal + state + foreign, with the breakdown and the retirement-only share; includes tax on salary while
+  (federal + state, local and foreign, with the breakdown and the retirement-only share; includes tax on salary while
   working); workplace-plan money used during the bridge years (your retirement → the later SS claim); Monte Carlo success %. Status cards
   use an icon and text, not color alone.
 - **Warnings panel** (plain English), for whichever spouse it applies to: MRA+10 reduction / no supplement; deferred
@@ -114,12 +114,12 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
   Medicare at 65 for each spouse, each spouse's RMD start, conversions and transfers, each assumed death, and depletion. Markers can be
   hovered or keyboard-focused.
 - **Plan narrative:** about ten paragraphs covering each spouse's working years, retirement and annuity or pension,
-  the supplement, Social Security, spending and the bridge years, cash handling, RMDs and taxes (including foreign), the survivor phase, and
+  the supplement, Social Security, spending and the bridge years, cash handling, RMDs and taxes (federal, state, local and foreign), the survivor phase, and
   the outcome. See "Using it" for the full review packet.
 - **Charts:** income by source (stacked bars, survivor annuity and cash hatched) with a dashed spending + taxes line; account
   balances (stacked area); spending per month (living, FEHB, Part B, with a dashed line showing the same spending in
   today's dollars when viewing future dollars); checking & money market (money kept in and spent from each, moved to brokerage above the limit, their balances and
-  the limit, with a tooltip explaining where each year's surplus came from); federal, state, and foreign tax with the marginal bracket in the tooltip; withdrawal rate with a 4%
+  the limit, with a tooltip explaining where each year's surplus came from); federal tax and each state, local or foreign tax, with the marginal bracket in the tooltip; withdrawal rate with a 4%
   reference; SS claim-age comparison (62 / 67 / 70, one panel per spouse, break-even ages labeled); Monte Carlo fan
   chart (10–90th and 25–75th percentile bands, median, deterministic path); scenario A vs B. Legends are HTML
   buttons that toggle series. The palette is colorblind-validated; lines use dash patterns as a second cue.
@@ -146,8 +146,9 @@ The defaults are a made-up but typical household, meant as a starting point to r
   4.5% a year (inflation is 2.5%, SD 1.5%, persistence 0.6). The survivor keeps 70%.
 - **One-time events:** a $35k car every 8 years from 62 through 85 (deferrable), $25k of home repairs at 65, 75 and
   85, and $60k a year of long-term care in the last two years of each person's life.
-- **Taxes:** advanced federal tax and a 4% flat state tax. No Roth conversions and no foreign tax.
-- **Outcome:** the projection never runs short; Monte Carlo success is about 88% with fixed lifespans and 86% with
+- **Taxes:** advanced federal tax, and a state income tax of 4% flat after a $20,000 deduction on everything except
+  Social Security and Roth money (an example entry to replace with your own). No Roth conversions.
+- **Outcome:** the projection never runs short; Monte Carlo success is about 90% with fixed lifespans and 87% with
   stochastic ones. The warnings flag the 2058 RMD pushing taxable income from the 12% into the 22% bracket.
 
 ## Plan file (JSON)
@@ -157,7 +158,7 @@ panels so a person or an AI assistant can find and change a setting without the 
 
 - Each top-level section is one panel, in the panels' order: `household`, `inflation`, `employment`,
   `workplacePlans`, `iras`, `brokerage`, `checkingAndMoneyMarket`, `withdrawals`, `fersPension`, `fersSupplement`,
-  `otherPension`, `socialSecurity`, `spending`, `taxes`, `foreignTax`, `monteCarlo`. Nested objects are the groups
+  `otherPension`, `socialSecurity`, `spending`, `taxes`, `otherTaxes`, `monteCarlo`. Nested objects are the groups
   inside a panel, e.g. `checkingAndMoneyMarket.moneyMarket.moveToBrokerageAbove`,
   `monteCarlo.adaptiveRules.spendingGuardrails.enabled`. Names follow the panel labels.
 - Panels about one person hold `you` and `spouse` with the same settings, e.g. `employment.spouse.federal`,
@@ -176,7 +177,12 @@ panels so a person or an AI assistant can find and change a setting without the 
   direction, taxed, inTodaysDollars, deferrable }`.
 - `howToRead` restates these conventions and lists every allowed value (`PLAN_GUIDE` and `ENUMS` in `engine.js`).
   Settings with a fixed list of values use readable names, e.g. `withdrawals.strategy`: `fixedOrder | proportional |
-  bracketFill`; `foreignTax.relief`: `foreignCountryCreditsUsTax | usCreditsForeignTax | none`.
+  bracketFill`; `otherTaxes[].filing`: `household | separate`.
+- `otherTaxes` is a list of state, local and foreign income taxes: `{ name, fromYear, throughYear, filing, rates,
+  flatRate, brackets: [{ from, rate }], deduction, thresholdGrowthBelowInflation, retirementExclusion, exclusionFromAge,
+  appliesTo: { wages, fersAnnuity, otherPensions, fersSupplement, socialSecurity, traditionalTsp, traditional401k,
+  traditionalIra, rothTsp, roth401k, rothIra, rothConversions, brokerageGains, interest, oneTimeIncome },
+  rothAmountTaxed, creditsFederalTax }` (see "State, local and foreign taxes" below).
 
 On import, `validateInputs` reports unknown settings (ignored), missing ones (defaults used), wrong types, values that
 are not allowed (default used), likely whole-number percents (7 instead of 0.07) and unsupported conversion rows. A
@@ -205,9 +211,6 @@ All 2026 values, checked in October 2026. Each entry in the code carries its own
 | Part B and IRMAA | $202.90/mo standard; tiers at $109k / $137k / $171k / $205k / $500k single and $218k / $274k / $342k / $410k / $750k joint → $284.10 / $405.80 / $527.50 / $649.20 / $689.90 | CMS 2026 fact sheet |
 | RMD Uniform Lifetime Table | 72: 27.4 … 75: 24.6 … 100: 6.4 … 120: 2.0 | IRS Pub 590-B Table III |
 | RMD start age | 73 for births 1951–1959, 75 for 1960+ | SECURE 2.0 §107 |
-| Mexico ISR annual tariff | 11 brackets, 1.92%–35%; top bracket from MXN 5,107,703.93 (fixed fee 1,601,862.46) | SAT, Anexo 8 RMF 2026 (DOF 28-12-2025), art. 152 LISR |
-| UMA | MXN 117.31/day from Feb 1, 2026; pension exemption 15 × UMA/day | INEGI; LISR art. 93 fr. IV |
-| Foreign tax credit carryforward | 10 years | IRC §904(c) |
 | FERS MRA table | 55 (≤1947) → 56 (1953–1964) → 57 (1970+) | 5 USC 8412(h) |
 | FERS multiplier, survivor, supplement, diet COLA | 1% / 1.1% (62+ with 20 yrs) / special 1.7% first 20; −5% & 25% or −10% & 50%; SS62 × yrs (rounded, ≤ 40) ÷ 40; CPI ≤2% → CPI, 2–3% → 2%, >3% → CPI−1 | 5 USC 8415, 8419, 8421, 8442, 8462 |
 
@@ -329,7 +332,7 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - Advanced mode covers federal ordinary brackets, the standard deduction plus 65+ amounts, the 2025–2028 senior
   deduction, Social Security taxation via provisional income (AGI excluding SS + 50% of SS; thresholds not indexed;
   up to 85% taxable), long-term gains stacked at 0/15/20%, and the 3.8% NIIT on interest and gains. Simple mode applies one effective rate (MFJ or
-  single) to AGI. State tax is a flat rate on federal taxable income.
+  single) to AGI. State, local and foreign taxes are below.
 - Ordinary income includes both spouses' wages minus traditional contributions, post-retirement earnings, annuities,
   survivor annuities, supplements, RMDs and other traditional withdrawals, Roth conversions, and taxable one-time
   inflows.
@@ -455,47 +458,37 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   money waiting for large purchases (such as home-sale proceeds) stays out of the market. From the next year the
   limit applies again and anything above it moves to brokerage. Before retirement the limit applies as usual.
 - Checking and the money market earn only their interest rates, on the start-of-year balance, paid out as ordinary
-  income (US-taxable, optionally foreign-taxable). They get no market return, so Monte Carlo doesn't randomize them,
+  income (taxed federally, and by any other tax that counts interest). They get no market return, so Monte Carlo doesn't randomize them,
   and their real value erodes when the rate is below inflation.
 
-**Foreign residence tax (Mexico engine)**
-- **When it applies:** from the "tax resident from" year, on the income types you tick:
-  - traditional TSP withdrawals and RMDs
-  - Roth TSP withdrawals
-  - Roth conversions
-  - Social Security
-  - FERS annuity (including the survivor annuity) and FERS supplement
-  - brokerage investment gains, money market interest, and earned income
-- **Method:**
-  - *Mexico ISR* applies the 2026 annual tariff (art. 152 LISR, Anexo 8 RMF 2026; 1.92%
-    to 35% in 11 brackets) in pesos. Its limits and fixed fees are indexed at `isrIndex` per year from 2026. Income
-    is converted at the FX rate × (1 + drift)^years from the foreign-currency section, and the tax is converted back.
-    A weakening peso therefore raises the dollar tax, because the same dollars become more pesos against the brackets.
-  - *Flat* applies one effective rate above an optional exempt amount.
-- **Retirement-income exemption** (ISR, optional): TSP, Roth, FERS and supplement income is exempt up to UMA × multiple
-  × 365. The UMA is MXN 117.31/day in 2026, the multiple defaults to 15 (LISR art. 93 fr. IV), and the UMA is indexed
-  like the tariff. Gains, interest, wages and conversions are not exempt.
-- **Treaty art. 20 toggle** (optimistic bookend): TSP (traditional and Roth), the FERS annuity and the supplement are
-  treated as US-only government-service pensions.
-- **Roth:** in *earnings* mode, basis starts at `rothBasisPct` of today's Roth balance and grows with Roth contributions
-  and every conversion. Each withdrawal is part basis, part earnings, in proportion at the start of the year (the TSP's
-  own pro rata rule), and only the earnings share is foreign-taxable. Converted dollars are never taxed again.
-  *Share* mode taxes a fixed share of withdrawals.
-- **Double-tax relief:**
-  - *US credits foreign tax:* Mexico taxes in full as the residence country. The US foreign
-    tax credit reduces US federal tax, limited to the US tax attributable to the same income (US federal tax × that
-    income's share of AGI; one basket). This year's Mexican tax is used first, then the oldest carryforwards. Unused
-    credits carry forward 10 years and then expire (IRC §904(c); the 1-year carryback is not modeled). Each year shows
-    US tax before and after the credit, Mexican tax, the credit, the carryforward and expiries.
-  - *Foreign country credits US tax:* only the excess over the US tax on that income is paid abroad.
-  - *None:* both countries tax in full.
-- **Roth exposure:** qualified Roth withdrawals have no US tax to credit under any relief mode, which is the main
-  exposure for Roth money abroad.
-- **Payment:** foreign tax is paid from the portfolio like other taxes. It feeds into the conversion-tax calculation,
-  so the "tax due to conversion" figure includes it.
-- **Treaty:** US Social Security is taxable only by the US (art. 19). US government pensions paid to a US citizen are
-  taxable only by the US (art. 20). Whether TSP distributions fall under art. 20 or the private-pension rule of art. 19
-  is not settled. The art. 20 toggle and the checkboxes bracket that; they are not a statement of law.
+**State, local and foreign taxes** (`otherTaxes`)
+- A list of taxes, empty or as many as apply: a state, a city, a country you move to. Each applies from its first year
+  through its last (0 = the plan's start or end), so a move is one entry ending and another starting. Years are whole
+  (no part-year residency). Several entries can apply in the same year (a state and a city).
+- **What it counts:** the income types you tick, by whose income it is. Each spouse's pay (less traditional plan
+  contributions), annuities (a survivor annuity is the survivor's), FERS supplement, plan and IRA withdrawals (with
+  RMDs; an account belongs to its owner, the survivor after a death) and conversions are theirs; brokerage gains,
+  interest and taxable one-time income are joint. Social Security counts at its federally taxable amount, shared pro
+  rata. The TSP and a 401(k), and FERS annuities and other pensions, are separate types, so a tax (or a treaty) that
+  exempts federal pensions only can be set up by leaving the TSP and FERS boxes unticked.
+- **Roth withdrawals** count as their earnings share or in whole. In earnings mode basis starts at the Roth balance's
+  contributions share and grows with contributions and every conversion; each withdrawal is part basis, part
+  earnings, in proportion at the start of the year (the TSP's own pro rata rule), so converted dollars are never taxed
+  again.
+- **The amount:** counted income, less the retirement-income exclusion (each person's annuities, supplement, plan and
+  IRA withdrawals, and Social Security if counted, up to the amount from the age), less the deduction, at a flat rate
+  or the brackets (each rate on taxable income above its "from"). With **each spouse separately**, each living spouse
+  has a return with their own income and half the joint income, a deduction of their own and their own exclusion;
+  after a death there is one return. Every amount is in today's dollars and grows with inflation less the tax's gap.
+- **Credit for federal tax** (for a country that credits US tax under a treaty): the tax is reduced by the federal tax
+  times its income's share of AGI. Federal tax on the same income is credited only once, to the first such tax in the
+  list, and there is no carryforward. Roth money has no federal tax to credit.
+- **Payment:** these taxes are paid like federal tax: from the salaries while you work (on wages), otherwise from the
+  portfolio, and they count in the tax a Roth conversion causes.
+- **Treaties:** under the US–Mexico treaty US Social Security is taxable only by the US (art. 19), and US government
+  pensions paid to a US citizen only by the US (art. 20). Whether TSP distributions fall under art. 20 or the
+  private-pension rule of art. 19 is not settled; the income checkboxes let you bracket it. They are not a statement
+  of law.
 
 **Monte Carlo**
 - **Returns:** lognormal annual returns whose arithmetic mean is the pre- or post-retirement expected return, with
@@ -553,7 +546,7 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   no Roth 5-year rule; installment and annuity options are not modeled; brokerage investments are not taxed annually
   on dividends or interest; its basis is average cost (no tax-lot selection), and capital losses are never deducted
   from other income.
-- Taxes: no itemized deductions, credits, AMT, or FICA/payroll tax outputs. State tax is a flat rate. No qualifying
+- Taxes: no itemized deductions, credits, AMT, or FICA/payroll tax outputs. No qualifying
   surviving spouse status (it requires a dependent child). The IRMAA top tier is indexed like the others (by law it
   isn't indexed until 2028).
 - Medicare Part D/IRMAA-D and Medigap are not modeled (FEHB usually covers drugs); Part B is assumed to cost the same
@@ -561,13 +554,10 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - Stochastic mortality uses a period life table, with no projected mortality improvement and no health or wealth
   adjustment. The spouses' deaths are independent of each other. Returns are independent of inflation, with no fat
   tails.
-- **Mexico ISR** is indexed smoothly. In reality Mexico updates it in steps after more than 10% cumulative inflation.
-  The model ignores Mexican personal deductions, annual Mexican tax on brokerage dividends and interest,
-  currency gains, and residency tie-breakers. Mexican inflation is not randomized in Monte Carlo.
-- **Foreign tax credit** is simplified:
-  - one basket (no passive/general split), with the limitation = US tax × the income's share of AGI
-  - no carryback
-  - income the US may tax as the source country (such as US dividends) is not credited by Mexico first
+- **State, local and foreign taxes** are simplified: the income types you tick, a deduction, an optional
+  retirement-income exclusion, and a flat rate or brackets in today's US dollars (a foreign currency's moves show up
+  only through the growth gap); no itemized deductions, tax credits or special rates for gains, no part-year
+  residency, and the federal credit is pro rata by AGI with no carryforward or carryback.
 
 ## Tests
 
@@ -584,13 +574,15 @@ its holder's age and then the survivor's, another pension's COLA and survivor sh
 accounts of a type, conversions on the spouse's accounts, a single household ignoring the spouse's settings, and a
 spouse working after you retire), RMD ages and divisors, 2026 tax
 math, LTCG stacking, the NIIT on interest and gains, GS step increases (schedule, pay ratio, High-3 back-projection) and the pay cap, brokerage cost basis (deposits as basis, gains conserved through losses), IRAs (RMDs, the 10%
-penalty, Roth IRA contributions and basis, art. 20 covering only the TSP), conversions vs. untaxed transfers, one TSP
+penalty, Roth IRA contributions and basis), conversions vs. untaxed transfers, one TSP
 return with separate IRA returns, filing-status switch, Roth bracket fill, conversion tax paid from taxable, withdrawal order,
-depletion, mass and cash conservation for every account (including stochastic, cash, foreign tax and two-person
+depletion, mass and cash conservation for every account (including stochastic, cash, state and foreign taxes and two-person
 households, with the household totals equal to the sum of the accounts), Monte Carlo
 reproducibility, SS break-even, input normalization, the cash account (off, cap, sweep,
-drawn-first, interest taxed), foreign tax (Roth with no credit, credit offset, exemption, residency start, default
-income types), the plan report (every section present, one table row per year, no "undefined"/"NaN" text across
+drawn-first, interest taxed), state, local and foreign taxes (a flat rate with a deduction and a year range, brackets
+growing with inflation less a gap, separate returns and one return after a death, the retirement-income exclusion, the
+federal credit credited once and none on Roth money, the Roth earnings share, the TSP and 401(k) as separate types,
+tax on wages paid from the salaries, and an independent re-derivation of a Mexico tariff in dollars), the plan report (every section present, one table row per year, no "undefined"/"NaN" text across
 seven household variants), chained-CPI bracket indexing, the per-year bracket range and headroom, bracket fill under
 double taxation (deterministic and random markets, no unfunded tax), and the year-row size limit (under 128 properties,
 which keeps V8 from building rows in its slow dictionary mode). Plan-file tests check that every setting has a

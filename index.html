@@ -81,6 +81,10 @@ button, input, select { font: inherit; color: inherit; }
 .seg button { border: 0; background: transparent; padding: 5px 10px; cursor: pointer; min-height: 30px; }
 .seg button[aria-pressed="true"] { background: var(--text-1); color: var(--surface); }
 .person-seg { margin: 2px 0 4px; align-self: flex-start; }
+.ot-types { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 12.5px; }
+.ot-types label.check { flex-direction: row; align-items: center; gap: 6px; }
+.brackets { display: flex; flex-direction: column; gap: 4px; }
+.bracket-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: end; }
 /* What the inputs are in, and how the results are shown (the toggle applies to results only). */
 .inputs-note { margin: 0 0 10px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 12.5px; color: var(--text-2); }
 .inputs-note b { color: var(--text-1); }
@@ -799,8 +803,8 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
       { p: 'spending.foreignCurrency.enabled', label: 'Spend in a foreign currency', type: 'check', tip: 'Enter base spending in local currency; it converts to USD at the FX rate, which drifts each year. FEHB and Part B stay in USD.' },
       { p: 'spending.foreignCurrency.code', label: 'Currency code', type: 'text', show: (i) => i.spending.foreignCurrency.enabled },
       { p: 'spending.foreignCurrency.baseMonthly', label: 'Base spending (local)', type: 'num', min: 0, max: 2000000, step: 50, suffix: '/mo', show: (i) => i.spending.foreignCurrency.enabled, tip: 'Monthly living costs in local currency, today’s prices. Inflates at your inflation rate.' },
-      { p: 'spending.foreignCurrency.localPerUsd', label: 'FX rate (local per USD)', type: 'num', min: 0.01, max: 5000, step: 0.01, dec: 2, slider: false, show: (i) => i.spending.foreignCurrency.enabled || (i.foreignTax.enabled && i.foreignTax.method === 'mexicoIsr'), tip: 'Units of local currency per US dollar today. Also converts the Mexico ISR tariff.' },
-      { p: 'spending.foreignCurrency.annualDrift', label: 'Annual FX drift', type: 'pct', min: -0.1, max: 0.1, step: 0.001, show: (i) => i.spending.foreignCurrency.enabled || (i.foreignTax.enabled && i.foreignTax.method === 'mexicoIsr'), tip: 'Positive: the dollar buys more local currency each year (local spending gets cheaper in USD; the same USD income becomes more pesos against the ISR brackets).' },
+      { p: 'spending.foreignCurrency.localPerUsd', label: 'FX rate (local per USD)', type: 'num', min: 0.01, max: 5000, step: 0.01, dec: 2, slider: false, show: (i) => i.spending.foreignCurrency.enabled, tip: 'Units of local currency per US dollar today.' },
+      { p: 'spending.foreignCurrency.annualDrift', label: 'Annual FX drift', type: 'pct', min: -0.1, max: 0.1, step: 0.001, show: (i) => i.spending.foreignCurrency.enabled, tip: 'Positive: the dollar buys more local currency each year, so local spending gets cheaper in USD.' },
       { type: 'info', id: 'fxInfo' },
     ] },
     { id: 'taxes', title: 'Taxes, conversions & transfers', fields: [
@@ -809,7 +813,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
       { p: 'taxes.simpleRateSingle', label: 'Effective rate (single)', type: 'pct', min: 0, max: 0.4, step: 0.005, show: (i) => i.taxes.mode === 'simple' },
       { p: 'taxes.seniorDeduction', label: 'Senior deduction ($6,000, 2025–2028)', type: 'check', show: (i) => i.taxes.mode === 'advanced', tip: 'OBBBA §70103: $6,000 per person 65+, phased out at 6% of MAGI over $75k single / $150k joint. Expires after 2028.' },
       { p: 'taxes.bracketGrowthBelowInflation', label: 'Brackets grow slower than inflation by', type: 'pct', min: 0, max: 0.01, step: 0.0005, dec: 2, show: (i) => i.taxes.mode === 'advanced', tip: 'The IRS raises the brackets, standard deduction and capital-gains thresholds each year with “chained CPI”, which has typically run about 0.25 percentage points a year below the regular CPI used for inflation here. With 3% inflation and 0.25%, they grow 2.75% a year. 0% grows them with inflation. Each year’s projected amounts are in the Federal tax brackets section.' },
-      { p: 'taxes.stateRate', label: 'State income tax (flat)', type: 'pct', min: 0, max: 0.12, step: 0.001, tip: 'Flat rate on federal taxable income. Use 0% for a state without an income tax, or when living abroad.' },
       { p: 'taxes.heirsRate', label: 'Heirs’ marginal tax rate', type: 'pct', min: 0, max: 0.5, step: 0.01, dec: 0, tip: 'Used for the after-tax inheritance: heirs pay this rate on inherited traditional TSP / 401(k) and IRA money. Roth, checking, the money market and brokerage investments (stepped-up basis) pass tax-free.' },
       { type: 'group', label: 'Conversions & transfers' },
       { type: 'moves' },
@@ -821,32 +824,9 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
       } },
       { type: 'info', id: 'rothInfo' },
     ] },
-    { id: 'foreignTax', title: 'Foreign residence tax', fields: [
-      { p: 'foreignTax.enabled', label: 'Model a foreign income tax', type: 'check', tip: 'Tax charged by your country of residence on the income types you tick below, with a choice of double-tax relief. For grey areas (e.g. how Mexico treats TSP, Roth withdrawals and Roth conversions); confirm the real treatment with a cross-border tax professional.' },
-      { p: 'foreignTax.country', label: 'Country', type: 'text', maxlength: 24, show: (i) => i.foreignTax.enabled },
-      { p: 'foreignTax.residentFromYear', label: 'Tax resident from year', type: 'year', min: 2020, max: 2100, slider: false, show: (i) => i.foreignTax.enabled, tip: 'First calendar year the foreign tax applies (e.g. the year you move).' },
-      { p: 'foreignTax.method', label: 'Tax method', type: 'select', show: (i) => i.foreignTax.enabled, options: [['mexicoIsr', 'Mexico ISR (progressive annual tariff)'], ['flatRate', 'Flat effective rate']], tip: 'Mexico ISR applies the 2026 annual tariff (art. 152 LISR, 1.92%–35%) in pesos, indexed yearly, converted with the FX rate and drift in the foreign-currency section. Flat applies one effective rate.' },
-      { p: 'foreignTax.isrIndexing', label: 'ISR tariff and UMA indexing', type: 'pct', min: 0, max: 0.1, step: 0.001, show: (i) => i.foreignTax.enabled && i.foreignTax.method === 'mexicoIsr', tip: 'Yearly growth of the ISR brackets and the UMA from 2026 (Mexico actually updates the tariff in steps after more than 10% cumulative inflation). The peso FX rate and drift are set under Spending → Foreign-currency spending.' },
-      { p: 'foreignTax.flatRate', label: 'Flat effective rate', type: 'pct', min: 0, max: 0.5, step: 0.005, show: (i) => i.foreignTax.enabled && i.foreignTax.method === 'flatRate', tip: 'Effective (average) rate on the included income, not the top marginal rate.' },
-      { p: 'foreignTax.flatExemptAmount', label: 'Exempt amount per year', type: 'money', min: 0, max: 200000, step: 500, show: (i) => i.foreignTax.enabled && i.foreignTax.method === 'flatRate', tip: 'Included income below this (today’s $) is not taxed.' },
-      { p: 'foreignTax.relief', label: 'Double-tax relief', type: 'select', show: (i) => i.foreignTax.enabled, options: [['usCreditsForeignTax', 'US credits foreign tax (treaty, 10-yr carryforward)'], ['foreignCountryCreditsUsTax', 'Foreign country credits US tax'], ['none', 'None (taxed by both)']], tip: 'US credits: Mexico taxes as the residence country; the US foreign tax credit offsets US tax on the same income up to the US tax on it, and unused credits carry forward 10 years. Foreign country credits: only the excess over the US tax on that income is paid abroad. Roth withdrawals have no US tax to offset either way.' },
-      { p: 'foreignTax.treatyArt20', label: 'Treaty art. 20: TSP, FERS and supplement are US-only government pensions', type: 'check', show: (i) => i.foreignTax.enabled, tip: 'Optimistic bookend: treat all TSP distributions (traditional and Roth), the FERS annuity and the supplement as government-service pensions taxable only by the US (US–Mexico treaty art. 20), so the foreign country does not tax them. IRAs are never covered: money rolled out of the TSP into an IRA is generally a private pension under the treaty.' },
-      { p: 'foreignTax.retirementIncomeExemption', label: 'Retirement-income exemption (UMA)', type: 'check', show: (i) => i.foreignTax.enabled && i.foreignTax.method === 'mexicoIsr', tip: 'Mexico exempts retirement income up to a multiple of the daily UMA (LISR art. 93 fr. IV: 15 × UMA per day). Whether it applies to foreign pensions is debated, so it is off by default. Applies to TSP, Roth, FERS and supplement income only.' },
-      { p: 'foreignTax.umaDailyMxn', label: 'UMA daily value (2026, MXN)', type: 'num', min: 50, max: 500, step: 0.01, dec: 2, slider: false, show: (i) => i.foreignTax.enabled && i.foreignTax.method === 'mexicoIsr' && i.foreignTax.retirementIncomeExemption, tip: 'MXN 117.31 from Feb 1, 2026 (INEGI); indexed with the rate above.' },
-      { p: 'foreignTax.umaMultiple', label: 'Exempt multiple of UMA', type: 'num', min: 0, max: 100, step: 1, dec: 0, slider: false, show: (i) => i.foreignTax.enabled && i.foreignTax.method === 'mexicoIsr' && i.foreignTax.retirementIncomeExemption, tip: 'Exempt amount per year = multiple × UMA × 365.' },
-      { type: 'group', label: 'Applies to', show: (i) => i.foreignTax.enabled },
-      { p: 'foreignTax.appliesTo.traditionalWithdrawals', label: 'Traditional TSP and IRA withdrawals and RMDs', type: 'check', show: (i) => i.foreignTax.enabled },
-      { p: 'foreignTax.appliesTo.rothWithdrawals', label: 'Roth TSP and Roth IRA withdrawals', type: 'check', show: (i) => i.foreignTax.enabled, tip: 'Tax-free in the US, but many countries do not recognize Roth status.' },
-      { p: 'foreignTax.appliesTo.rothAmountTaxed', label: 'Roth amount taxed', type: 'select', show: (i) => i.foreignTax.enabled && i.foreignTax.appliesTo.rothWithdrawals, options: [['earningsShare', 'Earnings share only (basis tracked)'], ['fixedShare', 'Fixed share of withdrawals']], tip: 'Earnings share: Roth basis (contributions + conversions) is tracked and each withdrawal is part basis, part earnings, in proportion to the balance; only the earnings are taxed, so converted dollars are never taxed again.' },
-      { p: 'foreignTax.appliesTo.rothTaxedShare', label: 'Share of Roth withdrawals taxed', type: 'pct', min: 0, max: 1, step: 0.05, dec: 0, show: (i) => i.foreignTax.enabled && i.foreignTax.appliesTo.rothWithdrawals && i.foreignTax.appliesTo.rothAmountTaxed === 'fixedShare', tip: 'Use less than 100% if only part of each withdrawal would be taxed.' },
-      { p: 'foreignTax.appliesTo.rothConversions', label: 'Roth conversions', type: 'check', show: (i) => i.foreignTax.enabled, tip: 'Conversions into the Roth TSP or a Roth IRA. Transfers between accounts of the same tax type are never counted (the model assumes the foreign country does not tax a direct rollover).' },
-      { p: 'foreignTax.appliesTo.socialSecurity', label: 'Social Security', type: 'check', show: (i) => i.foreignTax.enabled, tip: 'The US–Mexico treaty (art. 19) makes US Social Security taxable only by the US.' },
-      { p: 'foreignTax.appliesTo.fersAnnuity', label: 'FERS annuity (incl. survivor annuity)', type: 'check', show: (i) => i.foreignTax.enabled, tip: 'US government pensions paid to US citizens are taxable only by the US under the US–Mexico treaty (art. 20).' },
-      { p: 'foreignTax.appliesTo.fersSupplement', label: 'FERS supplement', type: 'check', show: (i) => i.foreignTax.enabled, tip: 'Paid as part of the FERS annuity; generally treated like it.' },
-      { p: 'foreignTax.appliesTo.brokerageGains', label: 'Brokerage investment gains', type: 'check', show: (i) => i.foreignTax.enabled },
-      { p: 'foreignTax.appliesTo.interest', label: 'Money market interest', type: 'check', show: (i) => i.foreignTax.enabled },
-      { p: 'foreignTax.appliesTo.earnedIncome', label: 'Earned income', type: 'check', show: (i) => i.foreignTax.enabled },
-      { type: 'info', id: 'foreignInfo' },
+    { id: 'otherTaxes', title: 'State, local & foreign tax', fields: [
+      { type: 'otherTaxes' },
+      { type: 'info', id: 'otherTaxInfo' },
     ] },
     { id: 'monteCarlo', title: 'Monte Carlo', fields: [
       { p: 'monteCarlo.enabled', label: 'Enable Monte Carlo', type: 'check', tip: 'Random lognormal returns (means = each account’s expected return). Runs on demand in a background worker.' },
@@ -924,6 +904,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     if (f.type === 'info') { const el = h('div', { class: 'info', id: 'info-' + f.id, 'aria-live': 'polite' }); state.infoEls[f.id] = el; return el; }
     if (f.type === 'events') { const el = h('div', { id: 'eventsBox' }); return el; }
     if (f.type === 'moves') return h('div', { id: 'movesBox' });
+    if (f.type === 'otherTaxes') return h('div', { id: 'otherTaxesBox' });
     if (f.type === 'order') {
       const wrap = h('div', { class: 'field' }, h('div', { class: 'field-head' }, h('span', { class: 'lbl' }, f.label), makeTip(f.tip, f.label)), h('div', { id: 'orderBox' }));
       state.fieldEls.push({ f, wrap });
@@ -1058,6 +1039,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     }
     renderEvents(except && except.isEvent);
     renderMoves(except && except.isMove);
+    renderOtherTaxes(except && except.isOtherTax);
     renderOrder();
   }
 
@@ -1171,6 +1153,64 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
         ws.push({ owner: 'you', fromAccount: 'traditionalWorkplace', toAccount: 'rothIra', fromAge: a, throughAge: a, howMuch: 'fillBracket', fillToTopOfBracket: 0.22, fixedAmount: 50000 });
         afterChange();
       } }, '+ Add conversion or transfer')));
+  }
+
+  // State, local and foreign taxes: one card per tax. Rates and shares are typed as percents; amounts in today's $.
+  const OT_TYPE_LABELS = [['wages', 'Wages and other earnings'], ['fersAnnuity', 'FERS annuities (incl. survivor)'], ['otherPensions', 'Other pensions (incl. survivor)'],
+    ['fersSupplement', 'FERS supplement'], ['socialSecurity', 'Social Security (taxable part)'], ['traditionalTsp', 'Traditional TSP (incl. RMDs)'],
+    ['traditional401k', 'Traditional 401(k) (incl. RMDs)'], ['traditionalIra', 'Traditional IRAs (incl. RMDs)'], ['rothTsp', 'Roth TSP'], ['roth401k', 'Roth 401(k)'],
+    ['rothIra', 'Roth IRAs'], ['rothConversions', 'Roth conversions'], ['brokerageGains', 'Brokerage gains'], ['interest', 'Interest (money market, checking)'],
+    ['oneTimeIncome', 'Taxable one-time income']];
+  function renderOtherTaxes(keepFocus) {
+    const box = $('#otherTaxesBox');
+    if (!box || keepFocus) return;
+    box.innerHTML = '';
+    const list = state.inputs.otherTaxes;
+    const cards = h('div', { class: 'ev-list' });
+    const numIn = (val, set, o) => h('input', { type: 'text', inputmode: 'decimal', value: val, ...(o || {}), onchange: (e) => { const v = Number(e.target.value.replace(/[$,%\s]/g, '')); if (Number.isFinite(v) && v >= 0) set(v); else e.target.value = val; } });
+    list.forEach((t, k) => {
+      const upd = (f, v, rerender) => { t[f] = v; afterChange(rerender ? undefined : { isOtherTax: true }); };
+      const pctTxt = (x) => NF.num2.format(x * 100);
+      const card = h('div', { class: 'ev-card', role: 'group', 'aria-label': `Tax ${k + 1}: ${t.name}` },
+        h('label', { class: 'full' }, 'Name', h('input', { type: 'text', value: t.name, oninput: (e) => upd('name', e.target.value) })),
+        h('label', {}, 'From year (0 = now)', numIn(t.fromYear, (v) => upd('fromYear', Math.round(v), true))),
+        h('label', {}, 'Through year (0 = end)', numIn(t.throughYear, (v) => upd('throughYear', Math.round(v), true))),
+        h('label', { title: 'One return for the household, or a return for each spouse with their own income (joint income such as brokerage gains and interest split evenly), as in Mexico. With one spouse there is one return either way.' }, 'Returns',
+          h('select', { onchange: (e) => upd('filing', e.target.value, true) },
+            h('option', { value: 'household', selected: t.filing === 'household' }, 'One for the household'), h('option', { value: 'separate', selected: t.filing === 'separate' }, 'Each spouse separately'))),
+        h('label', {}, 'Rates', h('select', { onchange: (e) => { if (e.target.value === 'brackets' && !t.brackets.length) t.brackets = [{ from: 0, rate: t.flatRate }]; upd('rates', e.target.value, true); } },
+          h('option', { value: 'flat', selected: t.rates === 'flat' }, 'One flat rate'), h('option', { value: 'brackets', selected: t.rates === 'brackets' }, 'Brackets'))),
+        t.rates === 'flat' ? h('label', {}, 'Flat rate (%)', numIn(pctTxt(t.flatRate), (v) => upd('flatRate', v / 100, true))) : null,
+        t.rates === 'brackets' ? h('div', { class: 'full brackets' },
+          h('div', { class: 'ev-note' }, 'Each rate applies to taxable income above its “from” amount (today’s $).'),
+          ...t.brackets.map((b, n) => h('div', { class: 'bracket-row' },
+            h('label', {}, 'From ($)', numIn(NF.int.format(b.from), (v) => { b.from = v; afterChange(); })),
+            h('label', {}, 'Rate (%)', numIn(pctTxt(b.rate), (v) => { b.rate = v / 100; afterChange(); })),
+            h('button', { type: 'button', class: 'btn small', 'aria-label': `Remove bracket ${n + 1}`, onclick: () => { t.brackets.splice(n, 1); afterChange(); } }, '×'))),
+          h('button', { type: 'button', class: 'btn small', onclick: () => { const last = t.brackets[t.brackets.length - 1]; t.brackets.push({ from: last ? last.from + 25000 : 0, rate: last ? last.rate : 0.05 }); afterChange(); } }, '+ Add bracket')) : null,
+        h('label', { title: 'Subtracted from the counted income before the rates, on each return (a standard deduction or personal exemptions).' }, 'Deduction ($, today’s)', numIn(NF.int.format(t.deduction), (v) => upd('deduction', v, true))),
+        h('label', { title: 'Each person’s retirement income (annuities, the supplement, plan and IRA withdrawals, and Social Security if it is counted) is excluded up to this amount from the age below. Many states have such an exclusion; so does Mexico for pensions.' },
+          'Retirement income excluded ($ a person)', numIn(NF.int.format(t.retirementExclusion), (v) => upd('retirementExclusion', v, true))),
+        t.retirementExclusion > 0 ? h('label', {}, '…from age', numIn(t.exclusionFromAge, (v) => upd('exclusionFromAge', Math.round(v), true))) : null,
+        h('label', { title: 'Brackets, the deduction and the exclusion grow with inflation less this. Use about 0 if the tax indexes its amounts, the inflation rate if it never does, or a currency’s expected yearly fall against the dollar for a foreign tax with brackets in its own currency.' },
+          'Amounts grow slower than inflation by (%)', numIn(pctTxt(t.thresholdGrowthBelowInflation), (v) => upd('thresholdGrowthBelowInflation', v / 100, true))),
+        h('div', { class: 'full' }, h('div', { class: 'ev-note' }, 'Counts:'),
+          h('div', { class: 'ot-types' }, OT_TYPE_LABELS.map(([key, label]) => h('label', { class: 'check' },
+            h('input', { type: 'checkbox', checked: !!t.appliesTo[key], onchange: (e) => { t.appliesTo[key] = e.target.checked; afterChange(); } }), label)))),
+        t.appliesTo.rothTsp || t.appliesTo.roth401k || t.appliesTo.rothIra ? h('label', { class: 'full', title: 'Earnings only: contributions and conversions (already taxed) come back untaxed, pro rata. Whole: every Roth dollar withdrawn counts.' }, 'Roth withdrawals count',
+          h('select', { onchange: (e) => upd('rothAmountTaxed', e.target.value, true) },
+            h('option', { value: 'earnings', selected: t.rothAmountTaxed === 'earnings' }, 'Earnings only'), h('option', { value: 'whole', selected: t.rothAmountTaxed === 'whole' }, 'The whole withdrawal'))) : null,
+        h('label', { class: 'check full', style: 'flex-direction:row;align-items:center', title: 'Reduce this tax by the federal tax on the same income (its share of AGI), as a foreign country does under a tax treaty. Federal tax on the same income is credited only once, to the first such tax in the list.' },
+          h('input', { type: 'checkbox', checked: t.creditsFederalTax, onchange: (e) => upd('creditsFederalTax', e.target.checked, true) }), 'Credit federal tax on the same income'),
+        h('div', { class: 'full', style: 'text-align:right' }, h('button', { type: 'button', class: 'btn small', 'aria-label': `Remove ${t.name}`, onclick: () => { list.splice(k, 1); afterChange(); } }, 'Remove')));
+      cards.append(card);
+    });
+    if (!list.length) cards.append(h('div', { class: 'info' }, 'No state, local or foreign income tax.'));
+    box.append(h('div', { class: 'ev-note', style: 'margin-bottom:6px' }, 'Each tax applies to the income you tick, in the years you give. A move is one tax ending and another starting. Amounts are today’s dollars.'),
+      cards, h('div', { class: 'btnrow', style: 'margin-top:8px' }, h('button', { type: 'button', class: 'btn small', onclick: () => {
+        list.push({ ...clone(RE.defaultInputs().otherTaxes[0]), name: 'New tax' });
+        afterChange();
+      } }, '+ Add a tax')));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1378,25 +1418,17 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
         (inp.checkingAndMoneyMarket.moneyMarket.yield > 0 || inp.checkingAndMoneyMarket.checking.interestRate > 0) && ['Interest earned', money(sumBasis(res, null, null, (r) => r.cashInterest + r.checking.interest))],
       ]);
     }
-    if (inp.foreignTax.enabled) {
-      const ftYears = res.years.filter((r) => r.foreignTax > 0.5);
-      const bt = (k) => res.years.reduce((t, r) => t + (r.foreignByType ? dv(r, r.foreignByType[k]) : 0), 0);
-      const FTi = inp.foreignTax, last = res.years[res.years.length - 1];
-      I.foreignInfo.innerHTML = rows([
-        ['Foreign tax paid', `<b>${money(sumBasis(res, 'foreignTax'))}</b>${ftYears.length ? ` (${ftYears[0].year}–${ftYears[ftYears.length - 1].year})` : ''}`],
-        FTi.relief === 'foreignCountryCreditsUsTax' && ['Before credit for US tax', money(sumBasis(res, 'foreignTaxGross'))],
-        FTi.relief === 'foreignCountryCreditsUsTax' && ['Credit for US tax', money(sumBasis(res, 'foreignCredit'))],
-        FTi.relief === 'usCreditsForeignTax' && ['US foreign tax credit used', money(sumBasis(res, 'usFtc'))],
-        FTi.relief === 'usCreditsForeignTax' && ['Credits expired unused', money(sumBasis(res, 'ftcExpired'))],
-        FTi.relief === 'usCreditsForeignTax' && ['Still carried forward at end', money(dv(last, last.ftcCarryforward, 'bal'))],
-        FTi.method === 'mexicoIsr' && FTi.retirementIncomeExemption && ['Exempt retirement income', money(sumBasis(res, 'foreignExempt'))],
-        ['Roth counted as income', money(bt('roth') + bt('rothIra'))],
-        [`Traditional ${plansWord(inp)} counted`, money(bt('trad'))],
-        bt('ira') > 0.5 && ['Traditional IRA counted', money(bt('ira'))],
-        bt('conv') > 0.5 && ['Conversions counted', money(bt('conv'))],
-      ]);
-      $('#badge-foreignTax').textContent = `${FTi.method === 'mexicoIsr' ? 'ISR' : pct(FTi.flatRate)} from ${FTi.residentFromYear}`;
-    } else { I.foreignInfo.innerHTML = ''; $('#badge-foreignTax').textContent = 'off'; }
+    {
+      const OTi = inp.otherTaxes;
+      I.otherTaxInfo.innerHTML = rows(OTi.map((e, k) => {
+        const ys = res.years.filter((r) => r.otherByEntry && r.otherByEntry[k]);
+        const tax = sumBasis(res, null, null, (r) => (r.otherByEntry && r.otherByEntry[k] ? r.otherByEntry[k].tax : 0));
+        const credit = sumBasis(res, null, null, (r) => (r.otherByEntry && r.otherByEntry[k] ? r.otherByEntry[k].credit : 0));
+        return [`${e.name || `Tax ${k + 1}`}${ys.length ? ` (${ys[0].year}–${ys[ys.length - 1].year})` : ' (not in the plan years)'}`,
+          `<b>${money(tax)}</b>${credit > 0.5 ? ` after ${money(credit)} credit` : ''}`];
+      }).concat(OTi.length ? [['Basis', state.basis === 'real' ? 'today’s $' : 'future $']] : []));
+      $('#badge-otherTaxes').textContent = !OTi.length ? 'none' : OTi.length === 1 ? (OTi[0].name || '1 tax') : `${OTi.length} taxes`;
+    }
     I.rothInfo.innerHTML = !inp.taxes.conversionsAndTransfers.length ? '' : (() => {
       const conv = res.years.filter((r) => r.conversion > 0);
       const cw = inp.taxes.conversionsAndTransfers.filter((w) => RE.isConversion(w));
@@ -1467,7 +1499,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
           : 'Income covers spending' },
       { label: 'Lifetime income taxes', value: money(sumBasis(res, 'totalTax')),
         sub: `<span class="ln">Federal ${money(sumBasis(res, 'federalTax'))}</span>` +
-          `<span class="ln">State ${money(sumBasis(res, 'stateTax'))}${inp.foreignTax.enabled ? ` · ${esc(inp.foreignTax.country || 'Foreign')} ${money(sumBasis(res, 'foreignTax'))}` : ''}</span>` +
+          `<span class="ln">State, local &amp; foreign ${money(sumBasis(res, 'otherTax'))}</span>` +
           `<span class="ln">${money(sumBasis(res, 'totalTax', (r) => r.phase !== 'Working'))} of it in retirement</span>` },
       { label: `${pw} used in bridge years`, value: money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.tradTotal + r.wRoth)),
         sub: S.bridgeEndYear > S.bridgeStartYear ? `${S.bridgeStartYear}–${S.bridgeEndYear - 1}, retirement → ${inp.household.married ? 'both SS claims' : 'SS claim'}; net portfolio draw ${money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.netWithdrawal))}` : 'No gap: Social Security starts by retirement' },
@@ -1841,16 +1873,15 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     // 3. Taxes ---------------------------------------------------------------------------------
     const taxSets = [
       Object.assign({ type: 'bar', label: 'Federal', backgroundColor: P.s1, data: Y.map((r) => dv(r, r.federalTax)), stack: 't', _swatch: P.s1 }, gap),
-      Object.assign({ type: 'bar', label: 'State', backgroundColor: P.s2, data: Y.map((r) => dv(r, r.stateTax)), stack: 't', _swatch: P.s2 }, gap),
-      Object.assign({ type: 'bar', label: state.inputs.foreignTax.country ? `Foreign (${state.inputs.foreignTax.country})` : 'Foreign', backgroundColor: P.s3, data: Y.map((r) => dv(r, r.foreignTax)), stack: 't', _swatch: P.s3 }, gap),
+      ...state.inputs.otherTaxes.map((e, k) => { const c = [P.s2, P.s3, P.s4, P.s5, P.s7][k % 5];
+        return Object.assign({ type: 'bar', label: e.name || `Tax ${k + 1}`, backgroundColor: c, data: Y.map((r) => dv(r, r.otherByEntry && r.otherByEntry[k] ? r.otherByEntry[k].tax : 0)), stack: 't', _swatch: c }, gap); }),
     ].filter((d) => d.label === 'Federal' || d.data.some((v) => v > 0.5));
     upsertChart('ch-taxes', { type: 'bar', data: { labels, datasets: taxSets }, options: baseOptions(P, {
       scales: { x: { stacked: true }, y: { stacked: true } },
       plugins: { tooltip: { callbacks: { title: (it) => ageLbl(Y[it[0].dataIndex]), label: (c) => ` ${c.dataset.label}: ${money(c.raw)}`,
         footer: (it) => { const r = Y[it[0].dataIndex]; return [`Marginal bracket: ${pct(r.marginal)} (${r.status === 'mfj' ? 'joint' : 'single'})`, `AGI: ${money(dv(r, r.agi))}`, `Ordinary taxable income: ${money(dv(r, r.ordTaxable))}`]
           .concat(r.conversionTax > 0.5 ? [`From Roth conversion: ${money(dv(r, r.conversionTax))}`] : [])
-          .concat(r.foreignTaxGross > 0.5 ? [`Foreign tax before relief: ${money(dv(r, r.foreignTaxGross))}`] : [])
-          .concat(r.usFtc > 0.5 ? [`US foreign tax credit: −${money(dv(r, r.usFtc))} (federal shown after it)`] : []); } } } },
+          .concat(r.otherCredit > 0.5 ? [`Credit for federal tax: −${money(dv(r, r.otherCredit))} (other taxes shown after it)`] : []); } } } },
     }) });
     renderLegend('lg-taxes', ['ch-taxes'], taxSets);
 
@@ -2071,13 +2102,10 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     ['bracket.to', 'Bracket to', 'flow', ADV, 'Ordinary taxable income where this year’s bracket ends. Blank for the top (37%) bracket.'],
     ['bracket.headroom', 'Headroom in bracket', 'flow', ADV, 'Bracket to − ordinary taxable income: taxable income that still fits before the next rate. Below the deduction: the deduction still unused. Once Social Security is partly taxable, $1 more income can add up to $1.85 of taxable income.'],
     ['taxScale', 'Bracket index (vs 2026)', 'factor', ADV, 'This year’s brackets and deductions = the 2026 amounts × this index (inflation minus the chained-CPI gap each year).'],
-    ['federalTax', 'Federal tax', 'flow'], ['stateTax', 'State tax', 'flow'],
+    ['federalTax', 'Federal tax', 'flow'], ['otherTax', 'State, local & foreign tax', 'flow', (i) => i.otherTaxes.length > 0, 'All state, local and foreign income taxes, after any credit for federal tax.'],
+    ['otherCredit', 'Credit for federal tax', 'flow', (i) => i.otherTaxes.some((e) => e.creditsFederalTax), 'Federal tax on the same income that reduced the other taxes.'],
     ['wageTax', 'Tax paid by salary (working)', 'flow'], ['portfolioTax', 'Tax paid from cash flow', 'flow'],
-    ['foreignIncome', 'Foreign-taxed income', 'flow'], ['foreignExempt', 'Foreign-exempt retirement income', 'flow', (i) => i.foreignTax.enabled && i.foreignTax.retirementIncomeExemption],
-    ['foreignTaxGross', 'Foreign tax before relief', 'flow'], ['foreignCredit', 'Foreign credit for US tax', 'flow', (i) => i.foreignTax.relief === 'foreignCountryCreditsUsTax'], ['foreignTax', 'Foreign tax paid', 'flow'],
-    ['usFederalBefore', 'US federal before credit', 'flow', (i) => i.foreignTax.enabled && i.foreignTax.relief === 'usCreditsForeignTax'], ['usFtc', 'US foreign tax credit', 'flow', (i) => i.foreignTax.enabled && i.foreignTax.relief === 'usCreditsForeignTax'],
-    ['ftcCarryforward', 'Credit carryforward (end)', 'bal', (i) => i.foreignTax.enabled && i.foreignTax.relief === 'usCreditsForeignTax'], ['ftcExpired', 'Credit expired', 'flow', (i) => i.foreignTax.enabled && i.foreignTax.relief === 'usCreditsForeignTax'],
-    ['basis.roth', 'Roth plan basis (end)', 'bal', (i) => i.foreignTax.enabled && i.foreignTax.appliesTo.rothWithdrawals && i.foreignTax.appliesTo.rothAmountTaxed === 'earningsShare'], ['basis.rothEarnings', 'Roth plan earnings withdrawn', 'flow', (i) => i.foreignTax.enabled && i.foreignTax.appliesTo.rothWithdrawals && i.foreignTax.appliesTo.rothAmountTaxed === 'earningsShare'],
+    ['basis.roth', 'Roth plan basis (end)', 'bal', (i) => i.otherTaxes.some((e) => e.rothAmountTaxed === 'earnings' && (e.appliesTo.rothTsp || e.appliesTo.roth401k))], ['basis.rothEarnings', 'Roth plan earnings withdrawn', 'flow', (i) => i.otherTaxes.some((e) => e.rothAmountTaxed === 'earnings' && (e.appliesTo.rothTsp || e.appliesTo.roth401k))],
     ['conversionTax', 'Tax due to conversion', 'flow'], ['oneTimeTax', 'Tax due to one-time inflows', 'flow'],
     ['checking.deposit', 'Surplus to checking', 'flow', (i) => i.checkingAndMoneyMarket.checking.balance > 0 || i.checkingAndMoneyMarket.checking.keepInChecking > 0, 'Leftover money that tops checking up to its target (first in line).'],
     ['depositCash', 'Surplus to money market', 'flow'], ['depositTaxable', 'Surplus to brokerage', 'flow'],
@@ -2116,7 +2144,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
   }
   // Columns kept when printing (the full table is too wide for paper; CSV has everything).
   const PRINT_COLS = new Set(['year', 'ageYou', 'ageSpouse', 'phase', 'salary', 'pension', 'survivorAnnuity', 'supplement', 'ssYou', 'ssSpouse',
-    'rmd', 'wTaxable', 'spending', 'federalTax', 'foreignTax', 'shortfall', 'total']);
+    'rmd', 'wTaxable', 'spending', 'federalTax', 'otherTax', 'shortfall', 'total']);
   function renderTable(res) {
     const t = $('#yearTable');
     const S = res.summary;
@@ -2523,7 +2551,7 @@ self.onmessage = (e) => {
       ['Total unfunded, 95th percentile (today’s $)', (c) => m(c.sel.unfundedP95)],
       ['Worst single year unfunded (max, today’s $)', (c) => m(c.sel.worstYearMax)],
       ['Lifetime federal income tax', (c) => m(c.det.lifetimeFederalTax)],
-      ['Lifetime foreign income tax', (c) => m(c.det.lifetimeForeignTax)],
+      ['Lifetime state, local & foreign tax', (c) => m(c.det.lifetimeOtherTax)],
       ['Ending balance, future $ (deterministic)', (c) => m(c.det.endingBalance)],
       ['Ending balance, today’s $ (deterministic)', (c) => m(c.det.endingBalanceReal)],
       ['Ending balance, today’s $ (Monte Carlo median)', (c) => m(c.sel.endingRealP50)],

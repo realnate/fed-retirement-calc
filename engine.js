@@ -149,23 +149,6 @@
       eMale45: 34.21, eFemale55: 29.01,
     },
 
-    mexico: {
-      // SAT, Anexo 8 de la RMF 2026 (DOF 28-12-2025): annual ISR tariff for individuals (art. 152 LISR), MXN.
-      // [lower limit, fixed fee, rate on the excess over the lower limit]. Limits were raised by factor 1.1321 for 2026.
-      isrYear: 2026,
-      isrAnnual: [
-        [0, 0, 0.0192], [10135.12, 194.59, 0.064], [86022.12, 5051.37, 0.1088], [151176.20, 12140.13, 0.16],
-        [175735.67, 16069.64, 0.1792], [210403.70, 22282.14, 0.2136], [424353.98, 67981.92, 0.2352],
-        [668840.15, 125485.07, 0.30], [1276925.99, 307910.81, 0.32], [1702567.98, 444116.23, 0.34], [5107703.93, 1601862.46, 0.35],
-      ],
-      // INEGI: UMA daily value in force from February 1, 2026.
-      umaDaily2026: 117.31,
-      // LISR art. 93 fr. IV: retirement income exempt up to 15 × the daily UMA (× 365 per year).
-      pensionExemptUmaMultiple: 15,
-    },
-    // IRC §904(c): excess foreign tax credits carry forward 10 years (the 1-year carryback is not modeled).
-    ftcCarryforwardYears: 10,
-
     fers: {
       // 5 USC 8412(h); OPM "Types of Retirement". [last birth year in band, MRA in months].
       mraMonths: [
@@ -352,7 +335,6 @@
           ev(1, 'Long-term care (you)', 60000, 'outflow', { person: 'you', when: 'yearsBeforeDeath', repeat: 'eachYearForNYears', forNYears: 2 }),
           ev(1, 'Long-term care (spouse)', 60000, 'outflow', { person: 'spouse', when: 'yearsBeforeDeath', repeat: 'eachYearForNYears', forNYears: 2 }),
         ],
-        // localPerUsd and annualDrift also convert the Mexico ISR tariff (foreignTax.method 'mexicoIsr').
         foreignCurrency: { enabled: false, code: 'MXN', baseMonthly: 92500, localPerUsd: 18.5, annualDrift: 0 },
       },
       taxes: {
@@ -363,42 +345,13 @@
         // Federal brackets, standard deduction, 65+ amounts and LTCG breakpoints are indexed with chained CPI (IRC §1(f)(3)),
         // which runs below the CPI used for inflation: they grow at inflation minus this each year. 0 = with inflation.
         bracketGrowthBelowInflation: 0.0025,
-        stateRate: 0.04,
         heirsRate: 0.22, // heirs' marginal rate on inherited traditional plan and IRA money (after-tax inheritance)
         // By the owner's age (see MOVES). In a year the first conversion covering its owner's age applies, and every
         // transfer covering its owner's age.
         conversionsAndTransfers: [],
       },
-      foreignTax: {
-        enabled: false,
-        country: 'Mexico',
-        residentFromYear: 2045, // first year of foreign tax residency
-        method: 'mexicoIsr', // 'mexicoIsr' = Mexico's progressive annual ISR tariff; 'flatRate' = one effective rate
-        isrIndexing: 0.035, // yearly indexing of the ISR tariff and the UMA from 2026
-        flatRate: 0.30,
-        flatExemptAmount: 0, // today's $ of included income exempt each year (flat rate)
-        // Double-tax relief: 'usCreditsForeignTax' = Mexico taxes in full and the US credits it (treaty resourcing, §904
-        // limit, 10-year carryforward); 'foreignCountryCreditsUsTax' = Mexico credits the US tax on the same income;
-        // 'none' = both tax in full.
-        relief: 'foreignCountryCreditsUsTax',
-        treatyArt20: false, // TSP, FERS annuity and supplement are US-only government-service pensions (treaty art. 20)
-        retirementIncomeExemption: false, // ISR: Mexico's exemption for retirement income (LISR art. 93 fr. IV)
-        umaDailyMxn: 117.31, // 2026; indexed with isrIndexing
-        umaMultiple: 15,
-        appliesTo: {
-          traditionalWithdrawals: true,
-          rothWithdrawals: true,
-          rothAmountTaxed: 'fixedShare', // 'earningsShare' = the earnings part of each withdrawal (basis tracked); 'fixedShare'
-          rothTaxedShare: 1.0, // fixedShare: share of each Roth withdrawal taxed
-          rothConversions: true,
-          socialSecurity: false,
-          fersAnnuity: false, // all annuity income: FERS (incl. survivor annuities) and other pensions
-          fersSupplement: false,
-          brokerageGains: true,
-          interest: true, // money market and checking interest
-          earnedIncome: true,
-        },
-      },
+      // State, local and foreign income taxes (see OTHER_TAX_DEFAULT). The example household lives in a state with a flat tax.
+      otherTaxes: [{ ...JSON.parse(JSON.stringify(OTHER_TAX_DEFAULT)), name: 'State income tax', flatRate: 0.04, deduction: 20000 }],
       monteCarlo: {
         enabled: true,
         runs: 1000,
@@ -428,6 +381,23 @@
   // unit as `when`) | 'eachYearForNYears' (forNYears years in a row). taxed applies to inflows.
   const EVENT_DEFAULT = { label: 'Event', person: 'household', when: 'year', at: 2030, repeat: 'once', everyNYears: 5, through: 0, forNYears: 2,
     amount: 0, direction: 'outflow', taxed: 'no', inTodaysDollars: true, deferrable: false };
+  // A state, local or foreign income tax (otherTaxes). It applies from fromYear through throughYear (0 = the plan's start or end)
+  // to the income types checked in appliesTo, less `deduction` per return and a retirement-income exclusion per person
+  // (from exclusionFromAge), at a flat rate or the brackets ([{ from, rate }]: the rate on taxable income above `from`).
+  // Amounts are today's dollars and grow with inflation minus thresholdGrowthBelowInflation. filing: 'household' = one
+  // return; 'separate' = each spouse's own income (joint income split evenly). rothAmountTaxed: 'earnings' (basis tracked)
+  // or 'whole'. creditsFederalTax: reduced by the federal tax on the same income (federal tax is credited only once).
+  const OTHER_TAX_DEFAULT = {
+    name: 'Income tax', fromYear: 0, throughYear: 0, filing: 'household',
+    rates: 'flat', flatRate: 0.05, brackets: [], deduction: 0, thresholdGrowthBelowInflation: 0,
+    retirementExclusion: 0, exclusionFromAge: 0,
+    appliesTo: {
+      wages: true, fersAnnuity: true, otherPensions: true, fersSupplement: true, socialSecurity: false,
+      traditionalTsp: true, traditional401k: true, traditionalIra: true, rothTsp: false, roth401k: false, rothIra: false,
+      rothConversions: true, brokerageGains: true, interest: true, oneTimeIncome: true,
+    },
+    rothAmountTaxed: 'earnings', creditsFederalTax: false,
+  };
   // A conversion or transfer row: between two accounts of `owner`. howMuch: 'fillBracket' (conversions only) |
   // 'fixedAmount' (today's $ a year) | 'wholeBalance'.
   const MOVE_DEFAULT = { owner: 'you', fromAccount: 'traditionalWorkplace', toAccount: 'rothWorkplace', fromAge: 62, throughAge: 62, howMuch: 'fillBracket',
@@ -496,17 +466,18 @@
     'taxes.conversionsAndTransfers[].toAccount': ACCOUNT_NAMES,
     'taxes.conversionsAndTransfers[].howMuch': ['fillBracket', 'fixedAmount', 'wholeBalance'],
     'taxes.conversionsAndTransfers[].fillToTopOfBracket': BRACKET_RATES,
-    'foreignTax.method': ['mexicoIsr', 'flatRate'],
-    'foreignTax.relief': ['foreignCountryCreditsUsTax', 'usCreditsForeignTax', 'none'],
-    'foreignTax.appliesTo.rothAmountTaxed': ['earningsShare', 'fixedShare'],
+    'otherTaxes[].filing': ['household', 'separate'],
+    'otherTaxes[].rates': ['flat', 'brackets'],
+    'otherTaxes[].rothAmountTaxed': ['earnings', 'whole'],
     'monteCarlo.adaptiveRules.earlySocialSecurity.threshold': ['shareOfPlan', 'dollarAmount'],
   });
-  const LIST_ITEM = { 'spending.oneTimeEvents': EVENT_DEFAULT, 'taxes.conversionsAndTransfers': MOVE_DEFAULT };
+  const LIST_ITEM = { 'spending.oneTimeEvents': EVENT_DEFAULT, 'taxes.conversionsAndTransfers': MOVE_DEFAULT, otherTaxes: OTHER_TAX_DEFAULT,
+    'otherTaxes[].brackets': { from: 0, rate: 0 } };
   const allowed = (enumPath, v) => ENUMS[enumPath].some((a) => (typeof a === 'number' ? Math.abs(a - v) < 1e-9 : a === v));
   // Settings that are decimals (0.07 = 7%), and the value from which one is taken to be a whole-number percent typed by
   // mistake: 100% or more for rates and returns, above 150% for shares (spending phases and guardrails go a bit above 100%).
   const decimalLimit = (path) => (/(^|\.)(\w*Share|\w*ShareOfPlan|shareOfPlan)$/.test(path) ? 1.5
-    : /^monteCarlo\.volatility\./.test(path) || /(^|\.)(rate|yield|interestRate|annualRaise|beforeRetirement|afterRetirement|return|inflation|colaReducedBy|bracketGrowthBelowInflation|stateRate|heirsRate|simpleRateJoint|simpleRateSingle|flatRate|isrIndexing|annualDrift|volatility|persistence|spendingCut|fillToTopOfBracket|automatic|match|matchUpTo|cola)$/.test(path) ? 1 : null);
+    : /^monteCarlo\.volatility\./.test(path) || /(^|\.)(rate|yield|interestRate|annualRaise|beforeRetirement|afterRetirement|return|inflation|colaReducedBy|bracketGrowthBelowInflation|heirsRate|simpleRateJoint|simpleRateSingle|flatRate|thresholdGrowthBelowInflation|annualDrift|volatility|persistence|spendingCut|fillToTopOfBracket|automatic|match|matchUpTo|cola)$/.test(path) ? 1 : null);
 
   // How to read and edit a plan file, for people and AI assistants (in exported files and the review packet).
   const PLAN_GUIDE = [
@@ -533,6 +504,12 @@
     'spending.oneTimeEvents: when is "year" (a calendar year), "age" (the person\'s age; yours for household events) or "yearsBeforeDeath"; ' +
       'repeat is "once", "everyNYears" (from at through `through`, 0 = end of plan) or "eachYearForNYears" (forNYears years in a row); ' +
       'events for "you" or "spouse" stop after that person dies; taxed applies to inflows; deferrable events can slide under spending guardrails.',
+    'otherTaxes: state, local and foreign income taxes, each from fromYear through throughYear (0 = open). Each taxes the income types ' +
+      'checked in appliesTo (Social Security at its federally taxable amount; Roth withdrawals as their earnings or in whole), less a deduction per ' +
+      'return and up to retirementExclusion of each person\'s retirement income from exclusionFromAge, at flatRate or by brackets [{ from, rate }]. ' +
+      'Amounts are today\'s dollars and grow with inflation minus thresholdGrowthBelowInflation. filing "separate" gives each spouse a return ' +
+      '(joint income such as brokerage gains and interest split evenly). creditsFederalTax reduces it by the federal tax on the same income. ' +
+      'traditionalTsp and rothTsp are a federal employee\'s TSP; traditional401k and roth401k anyone else\'s plan.',
     'Allowed values: ' + Object.entries(ENUMS).map(([p, v]) => `${p} = ${v.join(' | ')}`).join('; ') + '.',
   ];
 
@@ -584,7 +561,7 @@
         list.forEach((v, i) => {
           const p = `${path}[${i}]`;
           if (!v || typeof v !== 'object' || Array.isArray(v)) { add(p, 'should be an object'); return; }
-          walk(LIST_ITEM[path], v, p, enumPath + '[]', true);
+          walk(LIST_ITEM[enumPath], v, p, enumPath + '[]', true); // by the [] path, so lists inside list items work too
           if (path === 'taxes.conversionsAndTransfers' && ACCOUNT_NAMES.includes(v.fromAccount) && ACCOUNT_NAMES.includes(v.toAccount) && !findMove(v)) {
             add(p, `${v.fromAccount} → ${v.toAccount} is not a conversion or transfer the model supports: the row is ignored`);
           }
@@ -789,15 +766,6 @@
     return out;
   }
 
-  // Mexico annual ISR (MXN) on taxable income `income` (MXN), with the tariff scaled by `scale` (indexing since 2026).
-  function mexicoIsr(income, scale) {
-    const t = CONSTANTS.mexico.isrAnnual;
-    if (!(income > 0)) return 0;
-    let i = 0;
-    while (i + 1 < t.length && income >= t[i + 1][0] * scale) i++;
-    return t[i][1] * scale + t[i][2] * (income - t[i][0] * scale);
-  }
-
   // Capital gains stacked on top of ordinary taxable income.
   function ltcgStackTax(ordTaxable, gains, brackets, scale) {
     let tax = 0;
@@ -812,7 +780,7 @@
   }
 
   /**
-   * Federal + state income tax for one year.
+   * Federal income tax for one year (state, local and foreign taxes are otherTaxes, in simulate).
    * p.ordinary: ordinary income excluding Social Security; p.ltcg: long-term gains; p.ss: total SS benefits.
    * p.interest: the interest included in p.ordinary (net investment income for the NIIT, like the gains).
    * p.scale: inflation index of statutory dollar amounts relative to CONSTANTS.baseYear.
@@ -865,10 +833,9 @@
         bracket = new Bracket(B[i][0] * s, to, to === null ? null : to - ordTaxable);
       } else bracket = new Bracket(null, null, Math.max(0, deduction - ordInc));
     }
-    const state = (p.stateRate || 0) * (ordTaxable + gainsTaxable);
     return {
       taxableSS, agi, magi: agi, deduction, seniorDeduction: senior, ordTaxable, gainsTaxable, taxableIncome: ordTaxable + gainsTaxable,
-      ordinaryTax, ltcgTax, niit, federal, state, total: federal + state, marginal, bracket,
+      ordinaryTax, ltcgTax, niit, federal, total: federal, marginal, bracket,
     };
   }
 
@@ -1014,7 +981,7 @@
     const H = inp.household, BR = inp.brokerage;
     const CK = inp.checkingAndMoneyMarket.checking, MM = inp.checkingAndMoneyMarket.moneyMarket, WD = inp.withdrawals;
     const FP = inp.fersPension, SS = inp.socialSecurity, SP = inp.spending, TX = inp.taxes;
-    const FT = inp.foreignTax, MC = inp.monteCarlo;
+    const MC = inp.monteCarlo;
 
     const Y0 = Math.round(H.currentYear);
     const infl = inp.inflation.rate;
@@ -1151,7 +1118,7 @@
 
     // State --------------------------------------------------------------------------------------
     const bal = { cash: Math.max(0, MM.balance), taxable: Math.max(0, BR.balance), checking: Math.max(0, CK.balance) };
-    // Roth basis (contributions + conversions) by account, for Mexico taxing only the earnings share of Roth withdrawals,
+    // Roth basis (contributions + conversions) by account, for a tax on only the earnings share of Roth withdrawals,
     // and the Roth IRA basis under the US ordering rules (contributions and conversions come out before earnings), for
     // the before-59½ check. The 5-year rules are assumed met.
     const basis = {}, usBasis = {};
@@ -1191,60 +1158,90 @@
     const LIVE = sp ? INVESTED : INVESTED.filter((k) => KEY_HOLDER[k] !== 'spouse');
     // Taxable-account cost basis (average cost): deposits add to it, withdrawals take it pro rata, growth does not.
     let taxBasis = bal.taxable * (1 - clamp(BR.unrealizedGainShare, 0, 1));
-    // US foreign-tax-credit carryforward vintages [{ year, amount }] (relief 'usCreditsForeignTax').
-    let cfPool = [];
 
-    // Foreign income tax on the income types the user flags. With `credit`, the US federal tax attributable to the
-    // same income (pro rata by AGI) offsets it, so only the excess is paid. Roth has no US tax to offset.
-    // Foreign (Mexican) income tax on the income types the user flags, and the double-tax relief between the countries.
-    //  - method 'flatRate': rate × (income − exempt); 'mexicoIsr': Mexico's annual tariff in MXN (indexed), converted at the FX
-    //    rate of the year, with the optional retirement-income exemption (UMA multiple) on pension-type income.
-    //  - art20: TSP, FERS annuity and supplement are US-only government-service pensions (not Mexico-taxable).
-    //  - Roth: 'earnings' taxes only the earnings share (1 − basis ÷ balance at the start of the year).
-    //  - relief 'foreignCountryCreditsUsTax': Mexico credits the US federal tax on the same income (pro rata by AGI);
-    //    'usCreditsForeignTax': Mexico taxes in full and the US credits it, limited to the US tax on that income (pro rata by AGI)
-    //    using this year's Mexican tax first and then carried-forward credits (`cfAvail`); 'none': no relief.
-    const mexYears = (Y) => Math.pow(1 + FT.isrIndexing, Y - C.mexico.isrYear);
-    const fxOf = (Y) => SP.foreignCurrency.localPerUsd * Math.pow(1 + SP.foreignCurrency.annualDrift, Y - Y0);
+    // State, local and foreign income taxes (otherTaxes) -----------------------------------------
+    // Income each tax can count, by type and by whose it is: [yours, your spouse's, joint]. Joint income (brokerage
+    // gains, interest, one-time income) is split evenly between the living spouses on separate returns. Income from an
+    // account belongs to its owner (the survivor after a death) and an annuity to whoever receives it. Social Security
+    // counts at its federally taxable amount, shared pro rata; a Roth withdrawal as its earnings share or in whole.
+    const OT = inp.otherTaxes;
+    const OT_TYPES = Object.keys(OTHER_TAX_DEFAULT.appliesTo);
+    const OT_RETIREMENT = { fersAnnuity: 1, otherPensions: 1, fersSupplement: 1, socialSecurity: 1, traditionalTsp: 1, traditional401k: 1,
+      traditionalIra: 1, rothTsp: 1, roth401k: 1, rothIra: 1 }; // what the retirement-income exclusion covers
+    const OT_ROTH = { rothTsp: 1, roth401k: 1, rothIra: 1 }; // not in federal AGI
+    const otBrackets = OT.map((e) => e.brackets.slice().sort((a, b) => a.from - b.from));
+    const otIdx = OT.map(() => 1); // each tax's dollar amounts: today's dollars, grown by inflation minus its gap
+    const otActive = (Y) => OT.map((e, k) => k).filter((k) => (!(OT[k].fromYear > 0) || Y >= OT[k].fromYear) && (!(OT[k].throughYear > 0) || Y <= OT[k].throughYear));
+    const pIdx = (p) => (p === sp ? 1 : 0);
+    const otType = (k) => {
+      const t = KEY_TYPE[k], h = holderOf(k), fed = !!(h && h.fed);
+      return t === 'trad' ? (fed ? 'traditionalTsp' : 'traditional401k') : t === 'roth' ? (fed ? 'rothTsp' : 'roth401k') : t === 'tradIra' ? 'traditionalIra' : 'rothIra';
+    };
     const NO_FLOWS = noFlows();
-    const foreignTaxCalc = (p, us, idxY, Y, cfAvail) => {
-      const pension = !FT.treatyArt20; // art. 20 covers the TSP (a US government plan) and the FERS annuity, never IRAs
-      const tsp = (k) => !(FT.treatyArt20 && holderOf(k) && holderOf(k).fed); // a 401(k) is not a government plan
-      const w = p.w || NO_FLOWS, rm = p.rmdBy || NO_FLOWS, sh = p.share || {};
-      const rothPart = (w, share) => (FT.appliesTo.rothAmountTaxed === 'earningsShare' ? (w || 0) * (1 - (share || 0)) : (w || 0) * FT.appliesTo.rothTaxedShare);
-      const byType = {
-        trad: FT.appliesTo.traditionalWithdrawals ? (tsp('trad') ? rm.trad + w.trad : 0) + (tsp('tradS') ? rm.tradS + w.tradS : 0) : 0,
-        ira: FT.appliesTo.traditionalWithdrawals ? (rm.tradIra + w.tradIra) + (rm.tradIraS + w.tradIraS) : 0,
-        roth: FT.appliesTo.rothWithdrawals ? (tsp('roth') ? rothPart(w.roth, sh.roth) : 0) + (tsp('rothS') ? rothPart(w.rothS, sh.rothS) : 0) : 0,
-        rothIra: FT.appliesTo.rothWithdrawals ? rothPart(w.rothIra, sh.rothIra) + rothPart(w.rothIraS, sh.rothIraS) : 0,
-        conv: FT.appliesTo.rothConversions ? p.conv || 0 : 0,
-        ss: FT.appliesTo.socialSecurity ? p.ss || 0 : 0,
-        fers: FT.appliesTo.fersAnnuity && pension ? p.fers || 0 : 0,
-        supp: FT.appliesTo.fersSupplement && pension ? p.supp || 0 : 0,
-        gains: FT.appliesTo.brokerageGains ? p.gains || 0 : 0,
-        interest: FT.appliesTo.interest ? p.interest || 0 : 0,
-        earned: FT.appliesTo.earnedIncome ? p.earned || 0 : 0,
-      };
-      const income = Object.values(byType).reduce((a, b) => a + b, 0);
-      let gross, exemptUsd = 0;
-      if (FT.method === 'mexicoIsr') {
-        const fx = fxOf(Y), scale = mexYears(Y);
-        if (FT.retirementIncomeExemption) {
-          const pensionIncome = byType.trad + byType.ira + byType.roth + byType.rothIra + byType.fers + byType.supp;
-          exemptUsd = Math.min(pensionIncome, (FT.umaDailyMxn * scale * FT.umaMultiple * 365) / fx);
-        }
-        gross = mexicoIsr((income - exemptUsd) * fx, scale) / fx;
-      } else {
-        gross = Math.max(0, income - Math.max(0, FT.flatExemptAmount) * idxY) * FT.flatRate;
+    const bracketTaxOf = (taxable, brackets, g) => {
+      let t = 0;
+      for (let i = 0; i < brackets.length; i++) {
+        const lo = brackets[i].from * g, hi = i + 1 < brackets.length ? brackets[i + 1].from * g : Infinity;
+        if (taxable <= lo) break;
+        t += (Math.min(taxable, hi) - lo) * brackets[i].rate;
       }
-      // US federal tax attributable to the Mexico-taxed income (its share of AGI; only the taxable part of SS counts).
-      const usPart = byType.trad + byType.ira + byType.conv + (FT.appliesTo.socialSecurity ? us.taxableSS : 0) + byType.fers + byType.supp + byType.gains +
-        byType.interest + (FT.appliesTo.earnedIncome ? p.earnedUS || 0 : 0);
-      const usAttrib = gross > 0 && us.agi > 0 ? us.federal * Math.min(1, usPart / us.agi) : 0;
-      let mxCredit = 0, usFtc = 0, limitation = 0;
-      if (FT.relief === 'foreignCountryCreditsUsTax') mxCredit = Math.min(gross, usAttrib);
-      else if (FT.relief === 'usCreditsForeignTax') { limitation = usAttrib; usFtc = Math.min(limitation, gross + (cfAvail || 0)); }
-      return { income, gross, exemptUsd, mxCredit, usFtc, limitation, mxPaid: gross - mxCredit, byType };
+      return t;
+    };
+    // q: { active (entry indexes), fixed (income by type that does not depend on withdrawals), w, rmdBy, share, conv, convOwner,
+    //      gains, oneTime, ssBy: [yours, spouse's gross SS], alive: [you, spouse], ages, detail }. us: the federal tax.
+    const otherTaxCalc = (q, us) => {
+      const out = { total: 0, credit: 0, byEntry: q.detail ? OT.map(() => null) : null };
+      if (!q.active.length) return out;
+      const inc = {}, earn = {};
+      for (const t of OT_TYPES) inc[t] = q.fixed[t].slice();
+      for (const t in OT_ROTH) earn[t] = [0, 0, 0];
+      const w = q.w || NO_FLOWS, rm = q.rmdBy || NO_FLOWS, sh = q.share || {};
+      for (const k of TRADITIONAL) { const v = (rm[k] || 0) + (w[k] || 0); if (v) inc[otType(k)][pIdx(ownerOf(k))] += v; }
+      for (const k of ROTH_ACCOUNTS) {
+        const v = w[k] || 0;
+        if (!v) continue;
+        const t = otType(k), i = pIdx(ownerOf(k));
+        inc[t][i] += v; earn[t][i] += v * (1 - (sh[k] === undefined ? 1 : sh[k]));
+      }
+      if (q.conv) inc.rothConversions[q.convOwner] += q.conv;
+      inc.brokerageGains[2] += q.gains || 0;
+      inc.oneTimeIncome[2] += q.oneTime || 0;
+      const ssTot = q.ssBy[0] + q.ssBy[1];
+      if (ssTot > 0 && us.taxableSS > 0) { const f = us.taxableSS / ssTot; inc.socialSecurity[0] += q.ssBy[0] * f; inc.socialSecurity[1] += q.ssBy[1] * f; }
+      let fedUsed = 0; // federal tax already credited: each tax credits only the part of its own share not yet used
+      for (const k of q.active) {
+        const e = OT[k], A = e.appliesTo, g = otIdx[k];
+        const cov = [0, 0, 0], ret = [0, 0];
+        let inAgi = 0;
+        for (const t of OT_TYPES) {
+          if (!A[t]) continue;
+          const v = OT_ROTH[t] && e.rothAmountTaxed === 'earnings' ? earn[t] : inc[t];
+          cov[0] += v[0]; cov[1] += v[1]; cov[2] += v[2];
+          if (OT_RETIREMENT[t]) { ret[0] += v[0]; ret[1] += v[1]; }
+          if (!OT_ROTH[t]) inAgi += v[0] + v[1] + v[2];
+        }
+        const excl = (i) => (e.retirementExclusion > 0 && q.alive[i] && q.ages[i] >= e.exclusionFromAge ? Math.min(ret[i], e.retirementExclusion * g) : 0);
+        const taxOn = (income) => {
+          const t = Math.max(0, income - Math.max(0, e.deduction) * g);
+          return e.rates === 'brackets' ? bracketTaxOf(t, otBrackets[k], g) : t * e.flatRate;
+        };
+        // One return for the household, or one for each living spouse.
+        const gross = e.filing === 'separate' && q.alive[0] && q.alive[1]
+          ? taxOn(cov[0] + cov[2] / 2 - excl(0)) + taxOn(cov[1] + cov[2] / 2 - excl(1))
+          : taxOn(cov[0] + cov[1] + cov[2] - excl(0) - excl(1));
+        let credit = 0;
+        if (e.creditsFederalTax && gross > 0 && us.agi > 0) {
+          credit = Math.min(gross, Math.max(0, us.federal * Math.min(1, inAgi / us.agi) - fedUsed));
+          fedUsed += credit;
+        }
+        out.total += gross - credit; out.credit += credit;
+        if (q.detail) {
+          const byType = {};
+          for (const t of OT_TYPES) if (A[t]) { const v = OT_ROTH[t] && e.rothAmountTaxed === 'earnings' ? earn[t] : inc[t]; byType[t] = v[0] + v[1] + v[2]; }
+          out.byEntry[k] = { tax: gross - credit, gross, credit, income: cov[0] + cov[1] + cov[2], excluded: excl(0) + excl(1), byType };
+        }
+      }
+      return out;
     };
     let idx = 1, hcIdx = 1, prevInfl = infl;
     let inflDev = 0; // AR(1) inflation deviation from the mean
@@ -1441,10 +1438,6 @@
       // the year). After a loss the basis can exceed the balance: then nothing is gain and the excess basis stays to
       // shelter later gains (losses are not deducted).
       const gainShare = bal.taxable > 0 ? clamp(1 - taxBasis / bal.taxable, 0, 1) : 0;
-      // Foreign tax credits older than the carryforward period expire; the rest are available this year.
-      let ftcExpired = 0;
-      cfPool = cfPool.filter((v) => { if (v.year < Y - C.ftcCarryforwardYears) { ftcExpired += v.amount; return false; } return true; });
-      const cfAvail = cfPool.reduce((t, v) => t + v.amount, 0);
 
       // One-time events
       let oneIn = 0, oneOut = 0, oneOrd = 0, oneLtcg = 0;
@@ -1529,33 +1522,41 @@
       const nOver65 = (youAlive && ageY >= 65 ? 1 : 0) + (spAlive && ageS >= 65 ? 1 : 0);
       const taxCtx = {
         status, year: Y, nOver65, scale: taxScale, ss: ssTotal, interest, mode: TX.mode, simpleMfj: TX.simpleRateJoint,
-        simpleSingle: TX.simpleRateSingle, stateRate: TX.stateRate, seniorDeduction: TX.seniorDeduction,
+        simpleSingle: TX.simpleRateSingle, seniorDeduction: TX.seniorDeduction,
       };
       const taxOf = (ordinary, ltcg) => computeTaxes({ ...taxCtx, ordinary, ltcg }); // US only
       // Taxable pay: salaries less traditional plan contributions, plus earnings after retiring. While you work it is all
       // in `wages` (taxed with the salaries that pay for living costs).
       const wages = sumP((p) => p.salary - p.empTrad) + (working ? postEarned : 0);
       const ordinaryFixed = wages + (working ? 0 : postEarned) + pension + survivorAnnuity + supplement + rmd + oneOrd + interest;
-      const ftActive = FT.enabled && Y >= FT.residentFromYear;
-      const earnedAll = sumP((p) => p.salary + p.post);
-      const earnedUS = sumP((p) => p.salary - p.empTrad) + postEarned;
-      const noForeign = { usTotal: 0, foreign: 0, foreignGross: 0, foreignCredit: 0, foreignIncome: 0, foreignByType: null, usFtc: 0, ftcLimit: 0, foreignExempt: 0 };
-      // US + foreign tax for a candidate set of withdrawals `w` (by account, beyond the RMDs) and conversion. Traditional
-      // IRA withdrawals before 59½ add the 10% early-withdrawal penalty (not an income tax: outside the foreign relief).
+      // State, local and foreign taxes this year, and the income they can count that does not depend on withdrawals.
+      const otNow = otActive(Y);
+      const otFixed = {};
+      if (otNow.length) {
+        for (const t of OT_TYPES) otFixed[t] = [0, 0, 0];
+        for (const p of people) {
+          const i = pIdx(p), oi = pIdx(otherOf(p) || p);
+          otFixed.wages[i] += p.salary - p.empTrad + p.post;
+          const ann = p.pen.fed ? otFixed.fersAnnuity : otFixed.otherPensions;
+          ann[i] += p.pension; ann[oi] += p.survivorAnnuity; // a survivor annuity is the other spouse's income
+          otFixed.fersSupplement[i] += p.supplement;
+        }
+        otFixed.interest[2] = interest;
+      }
+      const ssBy = [ssYou, ssSpouse], alive = [youAlive, spAlive], ages = [ageY, ageS];
+      const otQuery = (w, conv, noOneTime, detail) => ({ active: otNow, fixed: otFixed, w, rmdBy, share, conv, convOwner: convWin ? pIdx(convWin.ownerP) : 0,
+        gains: gainShare * w.taxable, oneTime: noOneTime ? 0 : oneOrd + oneLtcg, ssBy, alive, ages, detail });
+      // Federal and other income tax for a candidate set of withdrawals `w` (by account, beyond the RMDs) and conversion.
+      // Traditional IRA withdrawals before 59½ add the 10% early-withdrawal penalty (federal, not an income tax that another
+      // tax credits).
       const earlyIra = { tradIra: Y - ownerOf('tradIra').by < 60, tradIraS: Y - ownerOf('tradIraS').by < 60 };
       const taxFull = (w, conv, noOneTime) => {
         const ltcg = gainShare * w.taxable + (noOneTime ? 0 : oneLtcg);
         const us = taxOf(ordinaryFixed - (noOneTime ? oneOrd : 0) + w.trad + w.tradS + w.tradIra + w.tradIraS + conv, ltcg);
         const pen = earlyIra.tradIra || earlyIra.tradIraS
           ? C.ira.earlyPenaltyRate * ((earlyIra.tradIra ? w.tradIra : 0) + (earlyIra.tradIraS ? w.tradIraS : 0)) : 0;
-        if (!ftActive) {
-          return Object.assign(us, noForeign, { usTotal: us.total + pen, usFederalBefore: us.federal, earlyPenalty: pen, federal: us.federal + pen, total: us.total + pen });
-        }
-        const ft = foreignTaxCalc({ w, rmdBy, share,
-          conv, ss: ssTotal, fers: pension + survivorAnnuity, supp: supplement, gains: ltcg, interest, earned: earnedAll, earnedUS }, us, idx, Y, cfAvail);
-        return Object.assign(us, { usFederalBefore: us.federal, earlyPenalty: pen, federal: us.federal - ft.usFtc + pen, usTotal: us.total - ft.usFtc + pen,
-          usFtc: ft.usFtc, ftcLimit: ft.limitation, foreign: ft.mxPaid, foreignGross: ft.gross, foreignCredit: ft.mxCredit, foreignExempt: ft.exemptUsd,
-          foreignIncome: ft.income, foreignByType: ft.byType, total: us.total - ft.usFtc + ft.mxPaid + pen });
+        const ot = otherTaxCalc(otQuery(w, conv, noOneTime, false), us);
+        return Object.assign(us, { earlyPenalty: pen, federal: us.federal + pen, other: ot.total, otherCredit: ot.credit, total: us.total + pen + ot.total });
       };
       // Tax on the income that pays for living costs while working (wages, plus early benefits if they are spent too).
       let wageTax = 0;
@@ -1563,11 +1564,12 @@
         const annuity = coverBenefits ? pension + survivorAnnuity + supplement : 0;
         const ss = coverBenefits ? ssTotal : 0;
         const us = computeTaxes({ ...taxCtx, ss, ordinary: wages + annuity, ltcg: 0, interest: 0 });
-        if (ftActive) {
-          const ft = foreignTaxCalc({ earned: earnedAll, earnedUS: wages, ss,
-            fers: coverBenefits ? pension + survivorAnnuity : 0, supp: coverBenefits ? supplement : 0 }, us, idx, Y, cfAvail);
-          wageTax = us.total - ft.usFtc + ft.mxPaid;
-        } else wageTax = us.total;
+        wageTax = us.total;
+        if (otNow.length) {
+          const f = {};
+          for (const t of OT_TYPES) f[t] = t === 'wages' || (coverBenefits && (t === 'fersAnnuity' || t === 'otherPensions' || t === 'fersSupplement')) ? otFixed[t] : [0, 0, 0];
+          wageTax += otherTaxCalc({ active: otNow, fixed: f, conv: 0, convOwner: 0, gains: 0, oneTime: 0, ssBy: coverBenefits ? ssBy : [0, 0], alive, ages, detail: false }, us).total;
+        }
       }
       const convWin = conversionFor(Y);
       const convActive = !!convWin;
@@ -1703,17 +1705,9 @@
       const W = plus(main, cAlloc);
       if (conv > 0) moved[convWin.key] += conv;
       const wSum = total(W);
-      // Foreign tax credit bookkeeping: this year's Mexican tax is used first, then the oldest carryforwards; any
-      // unused Mexican tax becomes a new carryforward vintage.
-      let ftcFromCarry = 0;
-      if (ftActive && FT.relief === 'usCreditsForeignTax') {
-        const fromCurrent = Math.min(tx.foreignGross, tx.usFtc);
-        let need = tx.usFtc - fromCurrent;
-        for (const v of cfPool) { const take = Math.min(v.amount, need); v.amount -= take; need -= take; ftcFromCarry += take; }
-        const excess = tx.foreignGross - fromCurrent;
-        if (excess > 0.005) cfPool.push({ year: Y, amount: excess });
-        cfPool = cfPool.filter((v) => v.amount > 0.005);
-      }
+      // Each other tax's amount, credit and income by type, for the year row.
+      const otDetail = otNow.length
+        ? otherTaxCalc(otQuery(W, conv, false, true), taxOf(ordinaryFixed + W.trad + W.tradS + W.tradIra + W.tradIraS + conv, gainShare * W.taxable + oneLtcg)) : null;
       // Roth basis: withdrawals and transfers take basis pro rata; contributions and conversions add to it.
       // US ordering rules: Roth IRA withdrawals come from contributions and conversions first; earnings withdrawn before
       // 59½ would be taxed and penalized (flagged in a warning, not added).
@@ -1849,8 +1843,7 @@
         spendBase: baseSpend, phaseMult, fehb, partB, irmaaTier, irmaaCost, spending: otherOut,
         taxableSS: tx.taxableSS, agi: tx.agi, deduction: tx.deduction, ordTaxable: tx.ordTaxable, gainsTaxable: tx.gainsTaxable,
         taxableIncome: tx.taxableIncome, bracket: tx.bracket,
-        federalTax: tx.federal, usFederalBefore: tx.usFederalBefore, usFtc: tx.usFtc, ftcLimit: tx.ftcLimit, ftcFromCarry, ftcExpired,
-        ftcCarryforward: cfPool.reduce((t, v) => t + v.amount, 0), foreignExempt: tx.foreignExempt,
+        federalTax: tx.federal,
         // End-of-year cost basis, and the earnings / gain part of this year's withdrawals.
         basis: { roth: basis.roth + basis.rothS, rothEarnings: W.roth + W.rothS - rothBasisOut, rothIra: basis.rothIra + basis.rothIraS,
           rothIraEarnings: W.rothIra + W.rothIraS - rothIraBasisOut, taxable: taxBasis, taxableGain: taxGain },
@@ -1868,8 +1861,9 @@
         // Conversions and transfers this year by move (MOVES keys, e.g. tradToRothIra); `conversion` is the taxable total.
         moves: moved,
         ordinaryIncome: ordinaryFixed + W.trad + W.tradS + W.tradIra + W.tradIraS + conv, ltcgIncome: taxGain + oneLtcg, nOver65, taxScale,
-        stateTax: tx.state, usTax: tx.usTotal, foreignTax: tx.foreign, foreignTaxGross: tx.foreignGross,
-        foreignCredit: tx.foreignCredit, foreignIncome: tx.foreignIncome, foreignByType: tx.foreignByType,
+        // State, local and foreign tax (after any credit for federal tax), the credit, and each tax's detail (by entry;
+        // null when none applies): { tax, gross, credit, income, excluded, byType }.
+        otherTax: tx.other, otherCredit: tx.otherCredit, otherByEntry: otDetail ? otDetail.byEntry : null,
         totalTax: tx.total, wageTax, portfolioTax, conversionTax: convTax, marginal: tx.marginal,
         deposit, depositCash: toCash, depositTaxable: toTaxable, sweep, shortfall, cashIn, extraSavings: extraSave, coveredIncome,
         startCash: startBal.cash, startTaxable: startBal.taxable, startTrad: startBal.trad + startBal.tradS, startRoth: startBal.roth + startBal.rothS, startTotal,
@@ -1896,6 +1890,7 @@
       prevInfl = yrInfl;
       idx *= 1 + yrInfl;
       taxIdx *= 1 + yrInfl - taxGap;
+      for (let k = 0; k < OT.length; k++) otIdx[k] *= 1 + yrInfl - OT[k].thresholdGrowthBelowInflation;
       hcIdx *= 1 + SP.healthcare.inflation + (yrInfl - infl);
     }
 
@@ -1968,12 +1963,11 @@
       lifetimeFederalTax: sum((r) => r.federalTax),
       retirementFederalTax: sum((r) => r.federalTax, retiredRows),
       lifetimeTax: sum((r) => r.totalTax),
-      lifetimeStateTax: sum((r) => r.stateTax),
-      lifetimeForeignTax: sum((r) => r.foreignTax),
+      // State, local and foreign tax, in all and by entry, and the credit for federal tax that reduced it.
+      lifetimeOtherTax: sum((r) => r.otherTax),
+      lifetimeOtherCredit: sum((r) => r.otherCredit),
+      lifetimeOtherByEntry: OT.map((e, k) => sum((r) => (r.otherByEntry && r.otherByEntry[k] ? r.otherByEntry[k].tax : 0))),
       lifetimeIrmaa: sum((r) => r.irmaaCost),
-      lifetimeUsFtc: sum((r) => r.usFtc),
-      ftcExpiredTotal: sum((r) => r.ftcExpired),
-      ftcCarryforwardEnd: last ? last.ftcCarryforward : 0,
       // Left to heirs after tax: Roth TSP and IRA, money market, checking and taxable (stepped-up basis) pass tax-free;
       // traditional TSP and IRA are taxed at the heirs' rate.
       inheritance: last ? {
@@ -1986,7 +1980,6 @@
       // Recurring spending (living + FEHB + Part B) in retired years, and one-time outflows over the whole plan.
       lifetimeSpending: sum((r) => r.spending - r.oneTimeOut, retiredRows),
       lifetimeOneTimeOut: sum((r) => r.oneTimeOut),
-      lifetimeForeignTaxGross: sum((r) => r.foreignTaxGross),
       maxCash: years.reduce((m, r) => Math.max(m, r.balCash), 0),
       bridgeStartYear: retireYear, bridgeEndYear: bridgeEnd, bridgeTspUsed: bridgeTsp, bridgePortfolioUsed: bridgePortfolio,
       totalShortfall: sum((r) => r.shortfall),
@@ -2120,7 +2113,7 @@
       const TXi = inp.taxes;
       const withoutExcess = (r) => computeTaxes({ ordinary: r.ordinaryIncome - Math.min(r.deposit, r.rmd), ltcg: r.ltcgIncome, ss: r.ssYou + r.ssSpouse,
         status: r.status, year: r.year, scale: r.taxScale, nOver65: r.nOver65, mode: TXi.mode, simpleMfj: TXi.simpleRateJoint, simpleSingle: TXi.simpleRateSingle,
-        stateRate: TXi.stateRate, seniorDeduction: TXi.seniorDeduction }).marginal;
+        seniorDeduction: TXi.seniorDeduction }).marginal;
       const hit = rmdRows.find((r) => r.deposit > 1 && r.marginal > withoutExcess(r) + 1e-9);
       if (hit) {
         add('warn', 'rmdBracket', `The ${hit.year} RMD of ${usd(hit.rmd)} pushes taxable income from the ${pctTxt(withoutExcess(hit))} into the ${pctTxt(hit.marginal)} bracket: ` +
@@ -2132,17 +2125,17 @@
         const cost = years.filter((r) => r.year >= irmaaHit.year).reduce((t, r) => t + r.irmaaCost, 0);
         const yrs = years.filter((r) => r.irmaaCost > 0.5 && r.year >= irmaaHit.year).length;
         add('warn', 'rmdIrmaa', `RMD-era income triggers Medicare IRMAA surcharges from ${irmaaHit.year} (tier ${irmaaHit.irmaaTier}; based on MAGI two years earlier): ` +
-          `${usd(irmaaHit.irmaaCost)} extra Part B premium that year and ${usd(cost)} over ${yrs} year(s) (nominal).`);
+          `${usd(irmaaHit.irmaaCost)} extra Part B premium that year and ${usd(cost)} over ${yrs} year(s) (future dollars).`);
       }
     }
     const irmaaAny = years.find((r) => r.irmaaTier > 0 && r.partB > 0);
     if (irmaaAny && !W.some((w) => w.code === 'rmdIrmaa')) {
       const yrs = years.filter((r) => r.irmaaCost > 0.5).length;
       add('warn', 'irmaa', `Income crosses a Medicare IRMAA tier: Part B surcharges start in ${irmaaAny.year} (tier ${irmaaAny.irmaaTier}, ${usd(irmaaAny.irmaaCost)} extra that year) ` +
-        `and total ${usd(S.lifetimeIrmaa)} over ${yrs} year(s) (nominal).`);
+        `and total ${usd(S.lifetimeIrmaa)} over ${yrs} year(s) (future dollars).`);
     }
     if (S.depletionYear !== null) {
-      add('danger', 'depleted', `Portfolio is depleted in ${S.depletionYear} (your age ${S.depletionAge}). Unfunded spending through the plan end totals ${usd(S.totalShortfall)} (nominal).`);
+      add('danger', 'depleted', `Portfolio is depleted in ${S.depletionYear} (your age ${S.depletionAge}). Unfunded spending through the plan end totals ${usd(S.totalShortfall)} (future dollars).`);
     }
     // Widow(er) tax bracket jump
     if (sp && S.firstDeathYear !== null && S.firstDeathYear < S.endYear) {
@@ -2171,40 +2164,27 @@
       }
     }
 
-    // Foreign income tax
-    const FT = inp.foreignTax;
-    if (FT.enabled) {
-      const ftRows = years.filter((r) => r.foreignTax > 0.5);
-      const country = FT.country || 'Foreign';
-      const how = FT.method === 'mexicoIsr' ? `Mexico's progressive ISR tariff (2026, indexed ${pctTxt(FT.isrIndexing)}/yr)` : `a flat ${pctTxt(FT.flatRate)}`;
-      const relief = { usCreditsForeignTax: 'the US credits it against US tax on the same income', foreignCountryCreditsUsTax: `${country} credits the US tax on the same income`, none: 'no double-tax relief' }[FT.relief];
-      if (ftRows.length) {
-        add('info', 'foreignTax', `${country} income tax: ${usd(S.lifetimeForeignTax)} paid over ${ftRows.length} year(s) from ${FT.residentFromYear}, using ${how}; ${relief}` +
-          (FT.relief === 'usCreditsForeignTax' ? ` (${usd(S.lifetimeUsFtc)} of US tax credited).` : FT.relief === 'foreignCountryCreditsUsTax' ? ` (${usd(S.lifetimeForeignTaxGross)} before that credit).` : '.'));
-      } else {
-        add('info', 'foreignTaxNone', `${country} tax is on from ${FT.residentFromYear}, but none is owed with the selected income types${FT.relief === 'foreignCountryCreditsUsTax' ? ' after the credit for US tax' : ''}.`);
+    // State, local and foreign income taxes
+    const OT = inp.otherTaxes;
+    if (!OT.length) {
+      add('info', 'noOtherTax', 'No state, local or foreign income tax is included. Add one under “State, local & foreign tax” if any applies to you.');
+    }
+    const span = (k) => { const ys = years.filter((r) => r.otherByEntry && r.otherByEntry[k]); return ys.length ? [ys[0].year, ys[ys.length - 1].year] : null; };
+    OT.forEach((e, k) => {
+      const yrs = span(k), name = e.name || `Tax ${k + 1}`;
+      if (!yrs) return;
+      const credit = years.reduce((t, r) => t + (r.otherByEntry && r.otherByEntry[k] ? r.otherByEntry[k].credit : 0), 0);
+      add('info', 'otherTax', `${name}: ${usd(S.lifetimeOtherByEntry[k])} in future dollars over ${yrs[0]}–${yrs[1]}` +
+        (e.creditsFederalTax ? `, after ${usd(credit)} of credit for federal tax on the same income.` : '.'));
+      const roth = years.reduce((t, r) => { const d = r.otherByEntry && r.otherByEntry[k]; return t + (d ? (d.byType.rothTsp || 0) + (d.byType.roth401k || 0) + (d.byType.rothIra || 0) : 0); }, 0);
+      if (roth > 0.5) {
+        add('warn', 'otherRoth', `${name} counts ${usd(roth)} of Roth withdrawals${e.rothAmountTaxed === 'earnings' ? ' (their earnings, after contributions and conversions)' : ''} as income. ` +
+          'There is no federal tax on qualified Roth money to credit, so that money is not tax-free there.');
       }
-      if (FT.relief === 'usCreditsForeignTax' && S.ftcExpiredTotal > 0.5) {
-        add('warn', 'ftcExpired', `${usd(S.ftcExpiredTotal)} of ${country} tax credits expire unused after the 10-year carryforward: ${country}'s tax on that income exceeds the US tax on it, ` +
-          `so the excess is a real extra cost.${S.ftcCarryforwardEnd > 0.5 ? ` ${usd(S.ftcCarryforwardEnd)} is still being carried forward at the end of the plan.` : ''}`);
-      }
-      const rothIncome = years.reduce((t, r) => t + (r.foreignByType ? r.foreignByType.roth : 0), 0);
-      if (FT.appliesTo.rothWithdrawals && !FT.treatyArt20 && rothIncome > 0.5) {
-        add('warn', 'foreignRoth', `${usd(rothIncome)} of Roth withdrawals ${FT.appliesTo.rothAmountTaxed === 'earningsShare' ? '(the earnings share, after your contributions and conversions)' : ''} is treated as ${country} taxable income. ` +
-          'There is no US tax on qualified Roth money to credit, so under these settings that money is not tax-free while you live abroad.');
-      }
-      const convForeign = years.filter((r) => r.foreignByType && r.foreignByType.conv > 0.5);
-      if (FT.appliesTo.rothConversions && convForeign.length) {
-        add('warn', 'foreignConversion', `Roth conversions in ${convForeign[0].year}–${convForeign[convForeign.length - 1].year} are counted as ${country} income as well as US income` +
-          `${FT.relief === 'none' ? ' with no relief, so they are taxed twice' : '; double-tax relief applies, so the higher of the two taxes is roughly what you pay'}.`);
-      }
-      if (FT.treatyArt20) {
-        add('info', 'art20', 'Treaty art. 20 toggle is on: TSP (traditional and Roth), the FERS annuity and the supplement are treated as US government-service pensions taxable only by the US. This is the optimistic bookend.');
-      }
-      if (/mex/i.test(country) && (FT.appliesTo.socialSecurity || ((FT.appliesTo.fersAnnuity || FT.appliesTo.fersSupplement) && !FT.treatyArt20))) {
-        add('info', 'treaty', 'Under the US–Mexico treaty, Social Security paid by the US is taxable only by the US (art. 19), and US government pensions paid to a US citizen ' +
-          'are taxable only by the US (art. 20). Flagging them as Mexico-taxable is a conservative stress test. Confirm with a cross-border tax professional.');
-      }
+    });
+    const crediting = OT.map((e, k) => k).filter((k) => OT[k].creditsFederalTax);
+    if (crediting.length > 1 && years.some((r) => r.otherByEntry && crediting.filter((k) => r.otherByEntry[k]).length > 1)) {
+      add('info', 'otherCreditOverlap', `${crediting.map((k) => OT[k].name || `Tax ${k + 1}`).join(' and ')} both credit federal tax in some years; federal tax is credited only once, to the first in the list.`);
     }
     const badCheck = years.filter((r) => Math.abs(r.cashCheck) > 5);
     if (badCheck.length) {
@@ -2271,7 +2251,9 @@
           detail: `${o === sp ? "Your spouse's " : ''}${mv.label} at ages ${w.fromAge}–${w.throughAge}: ${how}.`, who: o === sp ? 'spouse' : 'you', range: true });
       }
     }
-    if (inp.foreignTax.enabled) add(inp.foreignTax.residentFromYear, 'foreign', 'Foreign tax residency', `${inp.foreignTax.country || 'Foreign'} tax applies from ${inp.foreignTax.residentFromYear}.`);
+    for (const e of inp.otherTaxes) {
+      if (e.fromYear > S.startYear) add(e.fromYear, 'otherTax', `${e.name || 'Tax'} starts`, `${e.name || 'This tax'} applies from ${e.fromYear}${e.throughYear > 0 ? ` through ${e.throughYear}` : ''}.`);
+    }
     add(you.deathYear, 'deathYou', 'Your death', `Assumed lifespan: you live through age ${you.deathYear - you.by}.`);
     if (sp) add(sp.deathYear, 'deathSpouse', 'Spouse death', `Assumed lifespan: spouse lives through age ${sp.deathYear - sp.by}.`, 'spouse');
     if (S.depletionYear !== null) add(S.depletionYear, 'depleted', 'Depleted', 'The portfolio runs out this year.');
@@ -2442,7 +2424,7 @@
         },
         det: {
           endingBalance: S.endingBalance, endingBalanceReal: S.endingBalanceReal, afterTax: S.afterTaxInheritance, afterTaxReal: S.afterTaxInheritanceReal,
-          lifetimeFederalTax: S.lifetimeFederalTax, lifetimeForeignTax: S.lifetimeForeignTax, depletionYear: S.depletionYear,
+          lifetimeFederalTax: S.lifetimeFederalTax, lifetimeOtherTax: S.lifetimeOtherTax, depletionYear: S.depletionYear,
         },
       };
     });
@@ -2549,7 +2531,8 @@
     }
     const retire = inp.employment.you.retirementAge, youClaim = inp.socialSecurity.you.claimAge, rmdAge = rmdStartAge(H.you.birthYear);
     const ends = [retire, retire + 2, youClaim - 1, rmdAge - 1];
-    if (inp.foreignTax.enabled && inp.foreignTax.residentFromYear - 1 - H.you.birthYear >= retire) ends.push(inp.foreignTax.residentFromYear - 1 - H.you.birthYear);
+    // Also convert up to the year before a tax that starts later (a move).
+    for (const e of inp.otherTaxes) if (e.fromYear > Y0 && e.fromYear - 1 - H.you.birthYear >= retire) ends.push(e.fromYear - 1 - H.you.birthYear);
     if (opts.roth !== false) {
       // Candidates replace the plan's conversions and keep its transfers; conversions go where the plan's first one goes
       // (your traditional TSP / 401(k) to Roth if there is none), at your ages.
@@ -2597,7 +2580,6 @@
   function sensitivityAnalysis(raw, opts) {
     opts = opts || {};
     const inp = normalizeInputs(raw), o = toolOpts(inp, opts);
-    const FT = inp.foreignTax;
     const pt = (x) => `${Math.round(x * 1000) / 10}%`.replace('-', '−');
     const mod = (f) => (c) => { f(c); return c; };
     // Every account's return before or after retirement, and every volatility, move together.
@@ -2628,8 +2610,8 @@
     if (feds.some((w) => inp.fersSupplement[w].mode !== 'off')) {
       vars.push({ key: 'supp', label: 'FERS supplement', lo: mod((c) => { for (const w of feds) c.fersSupplement[w].mode = 'off'; }), hi: (c) => c, loText: 'eliminated', hiText: 'as planned' });
     }
-    if (FT.enabled) vars.push({ key: 'mexico', label: `${FT.country || 'Foreign'} tax`, lo: mod((c) => { c.foreignTax.relief = 'none'; }), hi: mod((c) => { c.foreignTax.enabled = false; }), loText: 'no double-tax relief', hiText: 'none at all' });
-    if ((FT.enabled && FT.method === 'mexicoIsr') || inp.spending.foreignCurrency.enabled) vars.push({ key: 'fx', label: 'Peso drift per year', lo: mod((c) => { c.spending.foreignCurrency.annualDrift -= 0.01; }), hi: mod((c) => { c.spending.foreignCurrency.annualDrift += 0.01; }), loText: pt(inp.spending.foreignCurrency.annualDrift - 0.01), hiText: pt(inp.spending.foreignCurrency.annualDrift + 0.01) });
+    if (inp.otherTaxes.length) vars.push({ key: 'otherTax', label: 'State, local & foreign tax', lo: (c) => c, hi: mod((c) => { c.otherTaxes = []; }), loText: 'as planned', hiText: 'none' });
+    if (inp.spending.foreignCurrency.enabled) vars.push({ key: 'fx', label: `${inp.spending.foreignCurrency.code || 'Currency'} drift per year`, lo: mod((c) => { c.spending.foreignCurrency.annualDrift -= 0.01; }), hi: mod((c) => { c.spending.foreignCurrency.annualDrift += 0.01; }), loText: pt(inp.spending.foreignCurrency.annualDrift - 0.01), hiText: pt(inp.spending.foreignCurrency.annualDrift + 0.01) });
     const total = vars.length * 2 + 1;
     let done = 0;
     const tick = () => { done++; if (opts.onProgress) opts.onProgress(done, total); };
