@@ -552,6 +552,8 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     return e;
   };
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Today's date as YYYY-MM-DD in the local time zone (toISOString is UTC, a day ahead in the evening in the Americas).
+  const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const getP = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
   const setP = (o, p, v) => { const ks = p.split('.'); let a = o; for (let i = 0; i < ks.length - 1; i++) a = a[ks[i]]; a[ks[ks.length - 1]] = v; };
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -731,7 +733,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
       { p: 'fersPension.$.serviceYears', label: 'Creditable service at retirement', type: 'num', min: 0, max: 45, step: 0.25, suffix: 'yrs', show: isFed, tip: 'Civilian creditable service at separation. Used for eligibility, the multiplier test, and the supplement.' },
       { p: 'fersPension.$.sickLeaveHours', label: 'Unused sick leave', type: 'int', min: 0, max: 6000, step: 8, suffix: 'hrs', show: isFed, tip: '2,087 hours = 1 year. Added to service for the annuity computation only, not for eligibility or the supplement.' },
       { p: 'fersPension.$.high3Mode', label: 'High-3 salary', type: 'select', options: [['auto', 'Auto (from projected salary)'], ['manual', 'Manual']], show: isFed, tip: 'Auto averages the highest 3 consecutive projected salaries before retirement.' },
-      { p: 'fersPension.$.manualHigh3', label: 'Manual High-3', type: 'money', min: 0, max: 400000, step: 100, show: (i, w) => isFed(i, w) && i.fersPension[w].high3Mode === 'manual', tip: 'High-3 average salary in today’s dollars; the plan inflates it to the year you separate. An estimate based on your current pay is already in today’s dollars.' },
+      { p: 'fersPension.$.manualHigh3', label: 'Manual High-3', type: 'money', min: 0, max: 400000, step: 100, show: (i, w) => isFed(i, w) && i.fersPension[w].high3Mode === 'manual', tip: 'Your High-3 as it will be when you separate: the average of those years’ pay, in their own dollars (not today’s). It is used as entered, not inflated. If you only know your current pay, Auto projects it with your raises.' },
       { p: 'fersPension.$.survivorElection', label: 'Survivor election', type: 'select', enable: hasSp, show: isFed, options: [['none', 'None (no reduction)'], ['partial', 'Partial: −5%, survivor gets 25%'], ['full', 'Full: −10%, survivor gets 50%']], tip: 'The annuity is reduced while the other spouse is alive; the reduction stops if that spouse dies first. If the annuitant dies first, the other spouse receives the survivor annuity (with COLAs) and can keep FEHB through it.' },
       { p: 'fersPension.$.postponeToAge', label: 'Postpone annuity to age', type: 'int', min: 0, max: 62, slider: false, show: isFed, tip: 'MRA+10 or deferred only. 0 = start right away (MRA+10) or at the earliest unreduced age (deferred). Starting at 62 (or 60 with 20+ years) avoids the 5%-per-year reduction.' },
       { p: 'fersPension.$.specialCategory', label: 'Special category (LEO / FF / ATC)', type: 'check', show: isFed, tip: '1.7% per year for the first 20 years, eligible at 50 with 20 years or any age with 25, COLAs from day one, and the supplement earnings test applies only after MRA.' },
@@ -1255,7 +1257,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     return window.RetireReport.buildPlanReport(res, {
       scenarioName: state.scenarioName, mc: state.inputs.monteCarlo.enabled ? state.mc : null, mcStale: state.mcStale, comparison: state.comparison,
       tools: state.tools, toolsStale: state.toolsStale,
-      generatedAt: new Date().toISOString().slice(0, 10), planFile: planFileText(),
+      generatedAt: localDate(), planFile: planFileText(),
     });
   }
   function renderReport(res) {
@@ -1342,7 +1344,9 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     const F = PW.fers;
     I.fersInfo.innerHTML = !F ? notFedNote('a pension goes under Other pension') : rows([
       ['Retirement type', `<b>${esc(typeTxt[F.retirementType])}</b> · ${esc(F.rule)}`],
-      ['High-3' + (inp.fersPension[w].high3Mode === 'auto' ? ' (auto)' : ''), at(F.high3, PW.retireYear)],
+      ['High-3' + (inp.fersPension[w].high3Mode === 'auto' ? ' (auto)' : ''), F.high3Years
+        ? `${money(state.basis === 'real' ? F.high3Today : F.high3)} ${state.basis === 'real' ? 'today’s $' : 'future $'} · average of ${F.high3Years[0]}–${F.high3Years[1]} pay`
+        : at(F.high3, PW.retireYear)],
       ['Service used in formula', `${NF.num2.format(F.compService)} yrs`],
       ['Multiplier', F.specialFormula ? '1.7% / 1.0% (special)' : pct(F.multiplier)],
       ['Basic annuity', at(F.basicAnnuity, PW.retireYear, '/yr')],
@@ -1425,6 +1429,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
         cw.length && ['Years converting', conv.length ? `${conv[0].year}–${conv[conv.length - 1].year}` : 'none (no room or no balance)'],
         conv.length && ['Total converted', money(conv.reduce((t, r) => t + dv(r, r.conversion), 0)) + basisNote],
         conv.length && ['Tax on conversions', money(conv.reduce((t, r) => t + dv(r, r.conversionTax), 0))],
+        conv.length && res.summary.lifetimeIrmaaFromConversions > 0.5 && ['IRMAA caused by conversions', money(sumBasis(res, null, null, (r) => r.irmaaFromConversion))],
         ...moved.map(([m, v]) => [m.label.replace(' (transfer)', ''), money(v) + basisNote]),
       ]);
     })();
@@ -1488,7 +1493,8 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
           `<span class="ln">State, local &amp; foreign ${money(sumBasis(res, 'otherTax'))}</span>` +
           `<span class="ln">${money(sumBasis(res, 'totalTax', (r) => r.phase !== 'Working'))} of it in retirement</span>` },
       { label: `${pw} used in bridge years`, value: money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.tradTotal + r.wRoth)),
-        sub: S.bridgeEndYear > S.bridgeStartYear ? `${S.bridgeStartYear}–${S.bridgeEndYear - 1}, retirement → ${inp.household.married ? 'both SS claims' : 'SS claim'}; net portfolio draw ${money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.netWithdrawal))}` : 'No gap: Social Security starts by retirement' },
+        sub: S.bridgeEndYear > S.bridgeStartYear ? `${S.bridgeStartYear}–${S.bridgeEndYear - 1}, retirement → ${inp.household.married ? 'both SS claims' : 'SS claim'}; net portfolio draw ${money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.netDraw))}` +
+          (S.bridgeConversionTax > 0.5 ? `, of which Roth-conversion tax ${money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.conversionTax))}` : '') : 'No gap: Social Security starts by retirement' },
     ];
     if (!inp.monteCarlo.enabled) cards.push({ label: 'Monte Carlo success', value: 'Off', statusText: 'Enable in the Monte Carlo panel', status: 'neutral' });
     else if (!mc) cards.push({ label: 'Monte Carlo success', value: state.mcRunning ? 'Running…' : 'Not run', status: 'neutral',
@@ -2049,7 +2055,8 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     ['checking.withdraw', 'Checking withdrawal', 'flow', (i) => i.checkingAndMoneyMarket.checking.balance > 0 || i.checkingAndMoneyMarket.checking.keepInChecking > 0, 'Spent from checking: only when the money market and all investments are empty.'], ['checking.interest', 'Checking interest', 'flow', (i) => i.checkingAndMoneyMarket.checking.balance > 0 || i.checkingAndMoneyMarket.checking.keepInChecking > 0], ['conversion', 'Roth conversion (taxable)', 'flow', null, 'Traditional → Roth conversions this year (into the Roth TSP or a Roth IRA): taxed as ordinary income.'],
     ...RE.MOVES.map((m) => [`moves.${RE.moveKey(m)}`, m.label, 'flow', (i) => i.taxes.conversionsAndTransfers.some((w) => w.fromAccount === m.fromAccount && w.toAccount === m.toAccount),
       RE.isConversion(m) ? 'Part of the Roth conversion (taxable).' : 'Transfer between accounts of the same tax type: not taxed.']),
-    ['spendBase', 'Living spending', 'flow'], ['fehb', 'FEHB', 'flow'], ['partB', 'Medicare Part B', 'flow'], ['irmaaTier', 'IRMAA tier (MAGI 2 yrs prior)', 'int'], ['irmaaCost', 'IRMAA surcharge', 'flow'], ['spending', 'Total outflows', 'flow'],
+    ['spendBase', 'Living spending', 'flow'], ['fehb', 'FEHB', 'flow'], ['partB', 'Medicare Part B', 'flow'], ['irmaaTier', 'IRMAA tier (MAGI 2 yrs prior)', 'int'], ['irmaaCost', 'IRMAA surcharge', 'flow'],
+    ['irmaaFromConversion', 'IRMAA caused by conversions', 'flow', (i) => i.taxes.conversionsAndTransfers.some(RE.isConversion), 'The part of the IRMAA surcharge that Roth conversions two years earlier cause: without them, MAGI then would put Part B in a lower tier.'], ['spending', 'Total outflows', 'flow'],
     ['taxableSS', 'Taxable SS', 'flow'], ['agi', 'AGI', 'flow'],
     ['deduction', 'Deduction', 'flow', ADV, 'Standard deduction plus the 65+ amounts (and the 2025–2028 senior deduction).'],
     ['ordTaxable', 'Ordinary taxable income', 'flow', null, 'AGI minus the deduction, excluding long-term gains. The brackets apply to this amount.'],
@@ -2064,7 +2071,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     ['otherCredit', 'Credit for federal tax', 'flow', (i) => i.otherTaxes.some((e) => e.creditsFederalTax), 'Federal tax on the same income that reduced the other taxes.'],
     ['wageTax', 'Tax paid by salary (working)', 'flow'], ['portfolioTax', 'Tax paid from cash flow', 'flow'],
     ['basis.roth', 'Roth plan basis (end)', 'bal', (i) => i.otherTaxes.some((e) => e.rothAmountTaxed === 'earnings' && (e.appliesTo.rothTsp || e.appliesTo.roth401k))], ['basis.rothEarnings', 'Roth plan earnings withdrawn', 'flow', (i) => i.otherTaxes.some((e) => e.rothAmountTaxed === 'earnings' && (e.appliesTo.rothTsp || e.appliesTo.roth401k))],
-    ['conversionTax', 'Tax due to conversion', 'flow'], ['oneTimeTax', 'Tax due to one-time inflows', 'flow'],
+    ['conversionTax', 'Tax due to conversion', 'flow', null, 'This year’s tax minus the tax with neither the conversion nor the withdrawals that pay for it: the tax on those withdrawals counts as the conversion’s.'], ['oneTimeTax', 'Tax due to one-time inflows', 'flow'],
     ['checking.deposit', 'Surplus to checking', 'flow', (i) => i.checkingAndMoneyMarket.checking.balance > 0 || i.checkingAndMoneyMarket.checking.keepInChecking > 0, 'Leftover money that tops checking up to its target (first in line).'],
     ['depositCash', 'Surplus to money market', 'flow'], ['depositTaxable', 'Surplus to brokerage', 'flow'],
     ['checking.fromMoneyMarket', 'Money market → checking', 'flow', (i) => i.checkingAndMoneyMarket.checking.balance > 0 || i.checkingAndMoneyMarket.checking.keepInChecking > 0, 'Moved from the money market to bring checking back up to its target.'],
@@ -2555,7 +2562,7 @@ self.onmessage = (e) => {
     catch (e) { console.warn('Bad scenario link', e); return null; }
   }
   // The plan file: how to read it (for people and AI assistants), then the settings in the input panels' order.
-  const planFileText = () => JSON.stringify({ app: 'fers-retirement-planner', name: state.scenarioName, exported: new Date().toISOString().slice(0, 10),
+  const planFileText = () => JSON.stringify({ app: 'fers-retirement-planner', name: state.scenarioName, exported: localDate(),
     howToRead: RE.PLAN_GUIDE, inputs: state.inputs }, null, 2);
   // After an import: settings that were ignored, missing or not allowed.
   function showImportNote(issues) {

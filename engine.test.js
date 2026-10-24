@@ -645,12 +645,15 @@
     ok(res.milestones.some((m) => m.key === 'pensionSpouse' && m.year === 2038), 'milestone');
     ok(res.summary.people.spouse.otherPension.startYear === 2038 && !res.summary.people.spouse.federal, 'summary');
   });
-  test('A manual High-3, an OPM estimate and a manual supplement are today\'s dollars, inflated to the year they apply', () => {
+  test('A manual High-3 is used as entered; an OPM estimate and a manual supplement are today\'s dollars, inflated to the year they apply', () => {
     // You retire at 57 (2040) with 30 years (MRA+30, 1% multiplier, partial election while your spouse lives); 3% inflation.
     const g = (y) => Math.pow(1.03, y - 2026), at = (res, y) => res.years.find((r) => r.year === y);
-    const hi = E.simulate(withInputs((i) => { i.fersPension.you.high3Mode = 'manual'; i.fersPension.you.manualHigh3 = 100000; }));
-    near(hi.summary.fers.high3, 100000 * g(2040), 1e-6, 'High-3 in 2040 dollars');
-    near(at(hi, 2040).per.you.pension, 0.01 * 30 * 100000 * g(2040) * 0.95, 1e-6, 'the annuity from it');
+    const manual = (o) => E.simulate(withInputs((i) => { i.fersPension.you.high3Mode = 'manual'; i.fersPension.you.manualHigh3 = 100000; }), o);
+    const hi = manual();
+    near(hi.summary.fers.high3, 100000, 1e-6, 'High-3 as entered');
+    near(at(hi, 2040).per.you.pension, 0.01 * 30 * 100000 * 0.95, 1e-6, 'the annuity from it');
+    const hiPath = at(manual({ inflationPath: Array.from({ length: 80 }, (_, k) => (k < 5 ? 0.06 : 0.02)) }), 2040);
+    near(hiPath.per.you.pension, 0.01 * 30 * 100000 * 0.95, 1e-6, 'not rescaled by a run’s inflation');
     const opm = (o) => E.simulate(withInputs((i) => { i.fersPension.you.useOpmEstimate = true; i.fersPension.you.opmEstimateMonthly = 3000; }), o);
     near(at(opm(), 2040).per.you.pension, 3000 * 12 * g(2040) * 0.95, 1e-6, 'OPM estimate inflated to its first year');
     const su = E.simulate(withInputs((i) => { i.fersSupplement.you.mode = 'manual'; i.fersSupplement.you.manualMonthly = 2000; }));
@@ -723,6 +726,9 @@
       'a GS-12 (step 5, Rest of U.S.) ten years in, retiring at 62 with 28 years');
     const S = E.simulate(d).summary;
     ok(S.fers.rule === '62+5' && S.fers.multiplier === 0.011 && S.depletionYear === null, 'immediate annuity at the 1.1% multiplier; the projection never runs short');
+    const after = (r) => r.afterRetirement;
+    ok([d.iras.you.roth, d.iras.you.traditional, d.workplacePlans.you, d.brokerage].every((a) => after(a.returns) === after(d.workplacePlans.you.returns)),
+      'every account earns the same after retirement by default');
   });
   test('Share links rebuild from the current defaults', () => {
     const c = E.inputsFromDiff({ spending: { baseMonthly: 4000 } });
@@ -797,6 +803,51 @@
     ok(plain.oneTimeOut === 0 && plain.conversion === 0 && plain.shortfall === 0, 'plain year');
     near(plain.coreWithdrawalRate, plain.withdrawalRate, 1e-6, 'equal when there is nothing to exclude');
     ok(res.summary.peakCoreWithdrawalRate < res.summary.peakWithdrawalRate, 'peak core below peak all-in');
+  });
+  test('Conversion tax includes the tax on the withdrawals that pay it: without the conversion the year pays the rest', () => {
+    // The first conversion year (2041, age 58), so both runs start it with the same balances. No surplus or cash: the
+    // TSP pays the conversion tax.
+    const plan = (i) => { i.spending.oneTimeEvents = []; i.spending.baseMonthly = 9000; };
+    const conv = E.simulate(withInputs((i) => { plan(i); i.taxes.conversionsAndTransfers = [WIN({ fromAge: 58, throughAge: 58 })]; })).years.find((y) => y.year === 2041);
+    const none = E.simulate(withInputs(plan)).years.find((y) => y.year === 2041);
+    ok(conv.conversion > 0 && conv.wTrad > none.wTrad + 1000, 'a TSP withdrawal pays the conversion tax');
+    near(conv.totalTax - conv.conversionTax, none.totalTax, 1, 'tax without the conversion');
+    near(conv.coreWithdrawal, none.coreWithdrawal, 1, 'core draw as without the conversion');
+  });
+  test('Bridge years: the net draw is withdrawals minus amounts saved over the bridge, with its conversion tax', () => {
+    const res = E.simulate(withInputs((i) => { i.taxes.conversionsAndTransfers = [WIN({ fromAge: 58, throughAge: 60 })]; }));
+    const S = res.summary, rows = res.years.filter((r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear);
+    const sum = (f) => rows.reduce((t, r) => t + f(r), 0);
+    const out = sum((r) => Object.values(r.flows).reduce((t, f) => t + f.withdraw, 0)), saved = sum((r) => r.deposit);
+    near(S.bridgePortfolioUsed, out - saved, 0.01, 'withdrawals − saved');
+    near(S.bridgeSaved, saved, 0.01, 'saved');
+    near(S.bridgeConversionTax, sum((r) => r.conversionTax), 0.01, 'conversion tax');
+    ok(rows.some((r) => r.netDraw < -1) && S.bridgePortfolioUsed < sum((r) => r.netWithdrawal) - 1, 'a year that saves offsets the draws');
+  });
+  test('IRMAA caused by a Roth conversion is the surcharge above the tier MAGI would give without it', () => {
+    const inp = withInputs((i) => { i.spending.healthcare.medicarePartBSpouse = true; i.taxes.conversionsAndTransfers = [WIN({ fromAge: 58, throughAge: 58, howMuch: 'fixedAmount', fixedAmount: 300000 })]; });
+    const res = E.simulate(inp), r = res.years.find((y) => y.year === 2043);
+    ok(r.irmaaTier > 0 && r.irmaaFromConversion > 0, '2041 conversion raises the 2043 tier');
+    ok(res.years.every((y) => y.irmaaFromConversion <= y.irmaaCost + 1e-6), 'never more than the surcharge');
+    near(res.summary.lifetimeIrmaaFromConversions, res.years.reduce((t, y) => t + y.irmaaFromConversion, 0), 1e-6, 'summary');
+    const none = E.simulate(withInputs((i) => { i.spending.healthcare.medicarePartBSpouse = true; })).summary;
+    near(none.lifetimeIrmaaFromConversions, 0, 0, 'none without conversions');
+  });
+  test('A conversion into an account assumed to earn more than its source is flagged', () => {
+    const into = (roth) => E.simulate(withInputs((i) => { i.taxes.conversionsAndTransfers = [WIN({ toAccount: 'rothIra' })]; i.iras.you.roth.returns.afterRetirement = roth; })).warnings;
+    const w = into(0.07).find((x) => x.code === 'moveReturnGap');
+    ok(w && w.level === 'info' && w.text.includes('7% after retirement instead of 5%'), 'Roth IRA 7% vs TSP 5%');
+    ok(!into(0.05).some((x) => x.code === 'moveReturnGap'), 'same return: no warning');
+  });
+  test('A High-3 reports the years it averages and that pay in today\'s dollars', () => {
+    const F = E.simulate(BASE()).summary.people.you.fers;
+    ok(JSON.stringify(F.high3Years) === '[2037,2039]', 'the three years before retiring in 2040');
+    const pay = (y) => 125000 * Math.pow(1.0201, y - 2026);
+    near(F.high3, (pay(2037) + pay(2038) + pay(2039)) / 3, 0.01, 'nominal average');
+    near(F.high3Today, [2037, 2038, 2039].reduce((t, y) => t + pay(y) / Math.pow(1.03, y - 2026), 0) / 3, 0.01, "today's dollars");
+    const M = E.simulate(withInputs((i) => { i.fersPension.you.high3Mode = 'manual'; })).summary.people.you.fers;
+    ok(JSON.stringify(M.high3Years) === '[2037,2039]', 'manual: the three years before retiring');
+    near(M.high3Today, [2037, 2038, 2039].reduce((t, y) => t + 200000 / Math.pow(1.03, y - 2026), 0) / 3, 0.01, "manual: today's dollars");
   });
 
   // --- Mortality, inflation, adaptive rules, Monte Carlo metrics --------------------------------------------
@@ -1236,6 +1287,27 @@
       'diet COLA minus', 'traditional TSP and IRA first up to the top of the 12% bracket', 'One-time outflows are paid from the Roth accounts first',
       '## Planning tools', 'Highest base spending with at least 90% success', '| Assumption | Setting | Success |']) ok(md.includes(t), `report has "${t}"`);
     ok(!/undefined|NaN/.test(md), 'no undefined/NaN');
+  });
+  test('Plan report: conversion tax and IRMAA, the bridge net of savings, interest column, High-3 years, deflators, survivor wording', () => {
+    const inp = withInputs((i) => {
+      i.taxes.conversionsAndTransfers = [WIN({ fromAge: 58, throughAge: 58, howMuch: 'fixedAmount', fixedAmount: 300000 })];
+      i.spending.healthcare.medicarePartBYou = true; i.spending.healthcare.medicarePartBSpouse = true; i.spending.healthcare.fehbMonthly = 700;
+      i.checkingAndMoneyMarket.moneyMarket.yield = 0.03;
+    });
+    const res = E.simulate(inp), S = res.summary, rep = R.buildPlanReport(res, { generatedAt: '2026-10-04' });
+    const text = rep.story.join(' ') + rep.markdown;
+    const F = S.people.you.fers, ann = F.initialAnnuity * F.survivorPct / 12;
+    for (const t of [`costing $${Math.round(S.totalConversionTax).toLocaleString('en-US')} in tax`, 'of Medicare IRMAA surcharges in 2043',
+      `less $${Math.round(S.bridgeSaved).toLocaleString('en-US')} saved`, `High-3 is $${Math.round(F.high3).toLocaleString('en-US')}, the average of 2037–2039 pay`,
+      "After the first death, living spending drops to 70%, FEHB to 45% (self only) and the deceased's Part B stops.",
+      `the index at the end of ${S.endYear} is ${res.years[res.years.length - 1].idxEnd.toFixed(3)}`,
+      `a survivor annuity of $${Math.round(ann / res.years.find((r) => r.year === F.pensionStartYear).idx).toLocaleString('en-US')}/mo in today's dollars`]) ok(text.includes(t), `report has "${t}"`);
+    ok(!/\/yr\}/.test(text), 'no stray brace');
+    const table = rep.markdown.split('## Year-by-year projection')[1].split('\n## ')[0].split('\n');
+    const cols = table.find((l) => l.startsWith('| Year')).split(' | ');
+    const k = cols.indexOf('Interest'), r = res.years.find((y) => y.cashInterest > 100);
+    ok(k > 0 && r, 'interest column');
+    ok(table.find((l) => l.startsWith(`| ${r.year} |`)).split(' | ')[k] === Math.round(r.cashInterest + r.checking.interest).toLocaleString('en-US'), 'interest value');
   });
   test('Plan report lists each state, local or foreign tax with its rules', () => {
     const res = E.simulate(withInputs((i) => {

@@ -71,7 +71,8 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 6. **Plan narrative / review report.** A plain-English walkthrough sits above the year table. **Copy for AI review** (top bar)
    or **Copy full report** copies a Markdown review packet; **Download .md** saves it. The packet has reviewer
    instructions, the narrative, key results, every input, the rules applied with their numbers, milestones, warnings,
-   Monte Carlo results (if run), the full year-by-year table, model limitations, tailored review questions, and the
+   Monte Carlo results (if run), the full year-by-year table (with an interest column when any account earns
+   interest, so each row balances from its visible columns), model limitations, tailored review questions, and the
    plan's settings file. It is meant to be pasted into an AI assistant or sent to an advisor for an independent
    check; the reviewer is asked to return an edited settings file for any change it recommends, ready to import.
    The Inputs section follows the input panels and names each panel's section of the settings file.
@@ -110,7 +111,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
 - **Warnings panel** (plain English), for whichever spouse it applies to: MRA+10 reduction / no supplement; deferred
   retirement (no supplement, no FEHB); not vested; supplement earnings test; under 5 years of FEHB; Part B
   special-enrollment deadline when someone turns 65 on active-employee FEHB; survivor election "none"; RMDs pushing into a higher bracket or IRMAA tier; IRMAA
-  surcharges; depletion; widow(er) bracket jump; 10% early-withdrawal penalty risk; 402(g) cap; Roth catch-up rule.
+  surcharges (and the part Roth conversions cause); a conversion or transfer into an account assumed to earn more than the one it leaves; depletion; widow(er) bracket jump; 10% early-withdrawal penalty risk; 402(g) cap; Roth catch-up rule.
 - **Milestone timeline:** each spouse's retirement, annuity or pension start, MRA and supplement end, each SS claim,
   Medicare at 65 for each spouse, each spouse's RMD start, conversions and transfers, each assumed death, and depletion. Markers can be
   hovered or keyboard-focused.
@@ -282,10 +283,11 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
 - Annuity = multiplier × High-3 × (service + sick leave ÷ 2,087, truncated to whole months). 1.1% applies when you
   separate at 62+ with 20+ years of creditable service; sick leave does not count toward that test.
 - Auto High-3 is the highest 3 consecutive projected salaries before retirement (back-projected if retirement is
-  under 3 years away). A manual High-3 is in today's dollars and is inflated to the separation year. An OPM estimate
+  under 3 years away). A manual High-3 is the High-3 as it will be at separation (the dollars of the years it
+  averages) and is used as entered, not inflated, in Monte Carlo too. An OPM estimate
   replaces the computed annuity: the gross monthly annuity *before* the survivor reduction and *after* any MRA+10
   reduction, in today's dollars, inflated to the first year it is paid. Agency estimates based on current pay are in
-  today's dollars; current retirees enter their current annuity. In Monte Carlo these follow each run's inflation.
+  today's dollars; current retirees enter their current annuity. In Monte Carlo the estimate follows each run's inflation.
 - Survivor election: the retiree's annuity is reduced 5% (partial) or 10% (full) while the other spouse is alive. The
   reduction stops the year after that spouse dies. If the retiree dies first, the other spouse gets 25% or 50% of the
   unreduced annuity (after any MRA+10 reduction, with all COLAs to date), starting the next year. With two federal
@@ -352,7 +354,8 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   every transfer applies. It is solved numerically,
   together with the withdrawal that pays the conversion's own tax, so ordinary taxable income (including any SS the
   conversion makes taxable and any traditional money withdrawn to pay the conversion tax) lands within $0.50 below the
-  bracket top. Conversion tax is paid from surplus income first, then the money market, brokerage, traditional plans
+  bracket top. A conversion's tax is the year's tax minus the tax with neither the conversion nor the withdrawals that
+  pay for it, so the tax on those withdrawals counts as the conversion's. It is paid from surplus income first, then the money market, brokerage, traditional plans
   and IRAs, then Roth, whatever the general withdrawal order is. A conversion is never larger than its tax can be paid for: if those accounts can't
   cover it, the conversion is reduced.
 - RMDs: Uniform Lifetime Table on each person's prior year-end traditional plan and traditional IRA balances, from
@@ -424,7 +427,11 @@ down to $500; IRMAA thresholds and the earnings-test limit grow with inflation.
   traditional (plans and IRAs) × (1 − heirs' rate, default 22%). It is shown deterministically, with its composition and Monte Carlo percentiles. It ignores estate and
   inheritance taxes, the timing of heirs' withdrawals, and real estate.
 - **IRMAA cost:** each year's extra Part B premium above the standard amount (a table column). The warnings state the
-  dollar amounts.
+  dollar amounts. The part that Roth conversions cause is its own column: the surcharge minus the one the tier would
+  give if MAGI two years earlier had included neither the conversion nor the withdrawals that pay its tax.
+- **Bridge years** (your retirement → the later SS claim): the net portfolio draw is the bridge's withdrawals minus the
+  amounts it saves (below $0 when it saves more than it draws). The narrative and packet say how much of it is
+  Roth-conversion tax and what the bridge would draw without the conversions.
 - **Withdrawal rates:**
   - *All-in* = net portfolio draw (every withdrawal including RMDs, minus amounts saved back) ÷ start-of-year
     portfolio.

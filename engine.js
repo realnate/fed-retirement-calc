@@ -227,13 +227,13 @@
   // conversions; contributionsWhileWorking is capped at the IRA limit.
   const IRAS_DEFAULT = {
     traditional: { balance: 0, returns: { beforeRetirement: 0.07, afterRetirement: 0.06 } },
-    roth: { balance: 0, basisShare: 1, returns: { beforeRetirement: 0.07, afterRetirement: 0.07 }, contributionsWhileWorking: 0 },
+    roth: { balance: 0, basisShare: 1, returns: { beforeRetirement: 0.07, afterRetirement: 0.06 }, contributionsWhileWorking: 0 },
   };
   const FERS_DEFAULT = {
     serviceYears: 20,
     sickLeaveHours: 0,
     high3Mode: 'auto',
-    manualHigh3: 100000, // today's dollars (inflated to the separation year)
+    manualHigh3: 100000, // the High-3 as it will be at separation, in the dollars of the years it averages (not inflated)
     survivorElection: 'full', // protects the other spouse
     postponeToAge: 0, // 0 = start as early as the retirement type allows
     specialCategory: false,
@@ -486,11 +486,14 @@
     'Panels about one person (employment, workplacePlans, iras, fersPension, fersSupplement, otherPension, socialSecurity) hold "you" and "spouse", ' +
       'with the same settings for each; settings beside them apply to the household. The spouse is used only when household.married is true.',
     'employment.<person>.federal makes that person a federal employee under FERS: GS pay, the TSP as their workplace plan (agency contributions set by law), ' +
-      'and fersPension / fersSupplement. Anyone else has a 401(k)-style workplace plan (workplacePlans.<person>.employerContributions) and otherPension.',
+      'and fersPension / fersSupplement. Anyone else has a 401(k)-style workplace plan (workplacePlans.<person>.employerContributions) and otherPension. ' +
+      "The other kind's settings are kept but ignored: for a federal employee, workplacePlans.<person>.employerContributions and otherPension.<person>; " +
+      'for anyone else, the GS settings (addStepIncreases, currentStep, yearsUntilNextStep, gsPayCap), fersPension.<person> and fersSupplement.<person>.',
     'Rates, returns and shares are decimals: 0.07 means 7%.',
     "Every dollar amount is in today's dollars (the plan's current year) and per year, unless the name ends in Monthly (per month). " +
-      'The only exception is a one-time event with inTodaysDollars false, which is in the dollars of its year. The calculator inflates amounts to the year ' +
-      'they apply to: a manual High-3 to the separation year, an OPM estimate to the first year it is paid, a manual supplement to the retirement year.',
+      'The exceptions are a one-time event with inTodaysDollars false, which is in the dollars of its year, and fersPension.<person>.manualHigh3, the High-3 ' +
+      'as it will be at separation (the dollars of the years it averages), used as entered. The calculator inflates the other amounts to the year they ' +
+      'apply to: an OPM estimate to the first year it is paid, a manual supplement to the retirement year.',
     'Ages are whole years, and a change tied to an age happens at the start of the calendar year that age is reached. ' +
       'Spending starts when you (household.you) retire; until then the salaries are assumed to cover living costs.',
     'Account types: traditionalWorkplace and rothWorkplace (the TSP or a 401(k)), traditionalIra, rothIra and brokerage (a taxable account of stock and bond funds, ' +
@@ -593,7 +596,7 @@
   // Revision of defaultInputs(). Share links store only the differences from the defaults, so they record the
   // revision they were made against and only links of the current revision can be decoded. Raise it whenever a
   // default changes.
-  const DEFAULTS_REVISION = 1;
+  const DEFAULTS_REVISION = 2;
   function overlay(base, diff) {
     if (diff === undefined) return base;
     if (Array.isArray(diff) || !diff || typeof diff !== 'object' || !base || typeof base !== 'object') return JSON.parse(JSON.stringify(diff));
@@ -1052,18 +1055,24 @@
       const rt = fersRetirementType(p.retirementAge, service, mra, P.specialCategory);
       // Average of the highest N consecutive projected salaries before retirement (N = 3 under current law, 5 if High-5).
       const highN = FP.averageSalaryYears === 5 ? 5 : 3;
-      let high3Auto = 0;
+      let high3Auto = 0, high3From = null;
       {
         const last = p.retireYear - 1;
         const first = Math.min(Y0, last - (highN - 1));
         for (let y = first; y + highN - 1 <= last; y++) {
           let tot = 0;
           for (let k = 0; k < highN; k++) tot += p.salaryIn(y + k);
-          high3Auto = Math.max(high3Auto, tot / highN);
+          if (tot / highN > high3Auto) { high3Auto = tot / highN; high3From = y; }
         }
       }
-      // A manual High-3 is in today's dollars: in the dollars of the separation year here.
-      const high3 = P.high3Mode === 'manual' ? P.manualHigh3 * detIdx(p.retireYear) : high3Auto;
+      // A manual High-3 is the High-3 as it will be at separation, like the auto one: used as entered, not inflated.
+      const manual = P.high3Mode === 'manual';
+      const high3 = manual ? P.manualHigh3 : high3Auto;
+      // The High-3 averages the pay of several years, each in its own year's dollars (a manual one, the years just before
+      // retiring): its years, and that pay in today's dollars.
+      const high3Years = manual ? [p.retireYear - highN, p.retireYear - 1] : high3From !== null ? [high3From, high3From + highN - 1] : null;
+      let high3Today = 0;
+      if (high3Years) for (let y = high3Years[0]; y <= high3Years[1]; y++) high3Today += (manual ? high3 : p.salaryIn(y)) / Math.pow(1 + infl, y - Y0) / highN;
       const pensionStartAge = fersStartAge(rt, p.retirementAge, service, mra, Math.round(P.postponeToAge || 0));
       const pensionStartYear = pensionStartAge === null ? null : p.by + pensionStartAge;
       const ageReduction = pensionStartAge === null ? 0 : fersAgeReduction(rt, pensionStartAge, service);
@@ -1080,13 +1089,13 @@
       // OPM estimate is in today's dollars, inflated to the first year paid.
       const initialAnnuity = rt.type === 'none' ? 0 : (P.useOpmEstimate ? P.opmEstimateMonthly * 12 * detIdx(firstPayYear) : basicAnnuity * (1 - ageReduction));
       // The year a today's-dollar input was inflated to at the expected inflation; each run rescales it by its own index.
-      const todayYear = rt.type === 'none' ? null : P.useOpmEstimate ? firstPayYear : P.high3Mode === 'manual' ? Math.max(p.retireYear, Y0) : null;
+      const todayYear = rt.type === 'none' || !P.useOpmEstimate ? null : firstPayYear;
       const suppEligible = SU.mode !== 'off' && rt.supplementEligible && p.retirementAge < 62 && pensionStartAge === p.retirementAge;
       // 0 = 70% of the PIA: claiming at 62 with an FRA of 67 (births 1960+, so everyone who can still get the supplement).
       const ss62Today = SU.ssAt62FromFersMonthly > 0 ? SU.ssAt62FromFersMonthly : 0.70 * SS[p.key].piaMonthly;
       const idxAtRetireDet = Math.pow(1 + infl, p.retireYear - Y0);
       const suppAnnualDet = suppEligible ? (SU.mode === 'manual' ? SU.manualMonthly * 12 * Math.max(1, idxAtRetireDet) : fersSupplementMonthly(ss62Today * idxAtRetireDet, service) * 12) : 0;
-      return { fed: true, P, SU, service, compService, mra, rt, highN, high3Auto, high3, pensionStartAge, pensionStartYear, ageReduction, specialFormula,
+      return { fed: true, P, SU, service, compService, mra, rt, highN, high3Auto, high3, high3Years, high3Today, pensionStartAge, pensionStartYear, ageReduction, specialFormula,
         multiplier, basicAnnuity, firstPayYear, election, survRed, survPct, initialAnnuity, todayYear, suppEligible, ss62Today, suppAnnualDet,
         annBase: null, suppMonthly: null, colaApplied: 0 }; // annBase: annuity incl. COLAs; suppMonthly: fixed when first paid
     };
@@ -1483,7 +1492,7 @@
       for (const k of ['rothIra', 'rothIraS']) share[k] = av[k] > 0 ? clamp((basis[k] + toIraBasis[k]) / av[k], 0, 1) : 1;
 
       // Spending (retired years; while working, salary is assumed to cover living costs)
-      let baseSpend = 0, fehb = 0, partB = 0, phaseMult = 1, irmaaTier = 0, spendCut = 0, irmaaCost = 0;
+      let baseSpend = 0, fehb = 0, partB = 0, phaseMult = 1, irmaaTier = 0, spendCut = 0, irmaaCost = 0, irmaaFromConversion = 0;
       const survivorMode = !!sp && !(youAlive && spAlive);
       const baseSpendNominal = SP.foreignCurrency.enabled
         ? (SP.foreignCurrency.baseMonthly * 12 * idx) / (SP.foreignCurrency.localPerUsd * Math.pow(1 + SP.foreignCurrency.annualDrift, Y - Y0)) * fxMult
@@ -1493,17 +1502,24 @@
         baseSpend = baseSpendNominal * phaseMult * (survivorMode ? SP.survivorShare : 1);
         if (guardCut) { spendCut = baseSpend * RU.spendingGuardrails.spendingCut; baseSpend -= spendCut; }
         fehb = SP.healthcare.fehbMonthly * 12 * hcIdx * (survivorMode ? SP.healthcare.fehbSelfOnlyShare : 1);
+        // The tier from MAGI two years earlier, and the tier it would have been without that year's Roth conversion.
         const look = magiByYear[Y - 2];
+        let tierNoConv = 0;
         if (look) {
           const th = C.medicare.irmaaThresholds[look.status];
-          for (let i = 0; i < th.length; i++) if (look.magi > th[i] * scale) irmaaTier = i + 1;
+          for (let i = 0; i < th.length; i++) {
+            if (look.magi > th[i] * scale) irmaaTier = i + 1;
+            if (look.magiNoConv > th[i] * scale) tierNoConv = i + 1;
+          }
         }
         const tierRatio = C.medicare.irmaaPartBMonthly[irmaaTier] / C.medicare.irmaaPartBMonthly[0];
+        const ratioNoConv = C.medicare.irmaaPartBMonthly[tierNoConv] / C.medicare.irmaaPartBMonthly[0];
         const enrolled = [[youAlive, ageY, SP.healthcare.medicarePartBYou], [spAlive, ageS, SP.healthcare.medicarePartBSpouse]];
         for (const [alive, age, on] of enrolled) {
           if (on && alive && age >= 65) {
             partB += SP.healthcare.partBMonthly * 12 * hcIdx * tierRatio;
             irmaaCost += SP.healthcare.partBMonthly * 12 * hcIdx * (tierRatio - 1); // extra premium above the standard amount
+            irmaaFromConversion += SP.healthcare.partBMonthly * 12 * hcIdx * (tierRatio - ratioNoConv);
           }
         }
       }
@@ -1622,10 +1638,12 @@
         return out;
       };
 
-      // Conversion `c` with the main withdrawals fixed. Its tax (the extra tax it causes) is paid from the surplus first,
-      // then cash, taxable, traditional and Roth TSP; that withdrawal can be taxable too, so the conversion tax is a small
-      // fixed point. It converges fast: only the difference between the marginal rates with and without `c` feeds back.
-      // Solving the conversion together with its own tax payment keeps the outer loop from oscillating.
+      // Conversion `c` with the main withdrawals fixed. Its tax is the year's tax minus the tax with neither the conversion
+      // nor the withdrawal that pays for it (the main withdrawals alone), so the tax on that withdrawal counts as the
+      // conversion's. It is paid from the surplus first, then cash, taxable, traditional and Roth TSP; that withdrawal can
+      // be taxable too, so the conversion tax is a fixed point. Each pass shrinks the error by the marginal rate on the
+      // withdrawal, so it converges in a few passes. Solving the conversion together with its own tax payment keeps the
+      // outer loop from oscillating.
       // fundGap = conversion tax due − what the accounts can still pay (≤ 0 when the tax can be paid in full).
       const ZERO = noFlows();
       const plus = (a, b) => { const o = noFlows(); for (const k of ACCOUNTS) o[k] = a[k] + b[k]; return o; };
@@ -1635,13 +1653,14 @@
         avail[convFrom] -= c;
         const capacity = ACCOUNTS.reduce((t, k) => t + Math.max(0, avail[k]), 0);
         let ct = c > 0 ? ct0 : 0, need = 0, cA = ZERO, t;
+        const without = c > 0 ? taxFull(main, 0, false).total : 0;
         for (let k = 0; k < 60; k++) {
           need = needMain < 0 ? Math.max(0, ct + needMain) : ct;
           cA = allocate(need, avail, TAX_ORDER);
           const w = plus(main, cA);
           t = taxFull(w, c, false);
           if (!(c > 0)) return { c: 0, tx: t, convTax: 0, cAlloc: cA, fundGap: -capacity };
-          const nct = t.total - taxFull(w, 0, false).total;
+          const nct = t.total - without;
           const done = Math.abs(nct - ct) < 0.005;
           ct = nct;
           if (done) break;
@@ -1815,7 +1834,8 @@
       const grossW = wSum + rmd;
       const netW = Math.max(0, grossW - deposit);
 
-      magiByYear[Y] = { magi: tx.magi, status };
+      // MAGI for IRMAA two years on, and what it would be with neither the conversion nor the withdrawal paying its tax.
+      magiByYear[Y] = { magi: tx.magi, magiNoConv: conv > 0 ? taxFull(main, 0, false).magi : tx.magi, status };
       const personRow = (p) => ({
         salary: p.salary, post: p.post, step: p.working && p.stepStart ? p.stepIn(Y) : null,
         contribTrad: p.empTrad, contribRoth: p.empRoth, contribEmployer: p.agency, contribRothIra: p.contribRothIra,
@@ -1840,7 +1860,7 @@
         oneTimeIn: oneIn, oneTimeOut: oneOut, events: eventLabels,
         // Workplace plans (TSP / 401(k)) and IRAs below are both spouses' together; `per` has each person's.
         rmd, wTrad: W.trad + W.tradS, wRoth: W.roth + W.rothS, wTaxable: W.taxable, wCash: W.cash, cashInterest, tradTotal: rmdTsp + W.trad + W.tradS, conversion: conv,
-        spendBase: baseSpend, phaseMult, fehb, partB, irmaaTier, irmaaCost, spending: otherOut,
+        spendBase: baseSpend, phaseMult, fehb, partB, irmaaTier, irmaaCost, irmaaFromConversion, spending: otherOut,
         taxableSS: tx.taxableSS, agi: tx.agi, deduction: tx.deduction, ordTaxable: tx.ordTaxable, gainsTaxable: tx.gainsTaxable,
         taxableIncome: tx.taxableIncome, bracket: tx.bracket,
         federalTax: tx.federal,
@@ -1875,7 +1895,9 @@
           fromMoneyMarket: chkIn, toMoneyMarket: chkOut },
         flows,
         withdrawalRate: !working && startTotal > 0 ? netW / startTotal : null,
-        netWithdrawal: netW,
+        // Withdrawals (incl. RMDs) minus amounts saved: negative in a year that saves more than it draws. netWithdrawal
+        // is the same, but never below 0.
+        netDraw: grossW - deposit, netWithdrawal: netW,
         // Core draw: what the portfolio supplies for recurring spending and taxes, excluding one-time events and the
         // tax caused by Roth conversions and taxable one-time inflows.
         coreWithdrawal: working ? 0 : Math.max(0, (otherOut - oneOut) + (portfolioTax - convTax - oneTimeTax) - (cashIn - oneIn - rmd)),
@@ -1909,6 +1931,8 @@
       return {
         mra: A.mra, mraYear: p.by + Math.ceil(A.mra - 1e-9), retirementType: A.rt.type, rule: A.rt.rule, supplementEligible: A.suppEligible,
         service: A.service, compService: A.compService, high3: A.high3, high3Auto: A.high3Auto, highN: A.highN, colaMode: FP.colaMode,
+        // The years an auto High-3 averages ([first, last], null for a manual one) and the average in today's dollars.
+        high3Years: A.high3Years, high3Today: A.high3Today,
         colaReduction: FP.colaReducedBy, multiplier: A.multiplier, specialFormula: A.specialFormula,
         basicAnnuity: A.basicAnnuity, ageReduction: A.ageReduction, pensionStartAge: A.pensionStartAge, pensionStartYear: A.pensionStartYear, election: A.election,
         survivorReduction: A.survRed, survivorPct: A.survPct, initialAnnuity: A.initialAnnuity,
@@ -1934,11 +1958,15 @@
     const claimYears = [Math.floor(you.claimTime)];
     if (sp) claimYears.push(Math.floor(sp.claimTime));
     const bridgeEnd = Math.max(...claimYears);
-    let bridgeTsp = 0, bridgePortfolio = 0;
+    // The bridge years: workplace-plan withdrawals, the net portfolio draw (withdrawals minus amounts saved; below 0 when
+    // the bridge saves more than it draws), the amount saved and the tax caused by Roth conversions.
+    let bridgeTsp = 0, bridgePortfolio = 0, bridgeSaved = 0, bridgeConvTax = 0;
     for (const r of years) {
       if (r.year >= retireYear && r.year < bridgeEnd) {
         bridgeTsp += r.tradTotal + r.wRoth;
-        bridgePortfolio += r.netWithdrawal;
+        bridgePortfolio += r.netDraw;
+        bridgeSaved += r.deposit;
+        bridgeConvTax += r.conversionTax;
       }
     }
     const retiredRows = years.filter((r) => r.phase !== 'Working');
@@ -1968,6 +1996,8 @@
       lifetimeOtherCredit: sum((r) => r.otherCredit),
       lifetimeOtherByEntry: OT.map((e, k) => sum((r) => (r.otherByEntry && r.otherByEntry[k] ? r.otherByEntry[k].tax : 0))),
       lifetimeIrmaa: sum((r) => r.irmaaCost),
+      // The part of it that Roth conversions cause (their income, two years earlier, raises the tier).
+      lifetimeIrmaaFromConversions: sum((r) => r.irmaaFromConversion),
       // Left to heirs after tax: Roth TSP and IRA, money market, checking and taxable (stepped-up basis) pass tax-free;
       // traditional TSP and IRA are taxed at the heirs' rate.
       inheritance: last ? {
@@ -1982,8 +2012,10 @@
       lifetimeOneTimeOut: sum((r) => r.oneTimeOut),
       maxCash: years.reduce((m, r) => Math.max(m, r.balCash), 0),
       bridgeStartYear: retireYear, bridgeEndYear: bridgeEnd, bridgeTspUsed: bridgeTsp, bridgePortfolioUsed: bridgePortfolio,
+      bridgeSaved, bridgeConversionTax: bridgeConvTax,
       totalShortfall: sum((r) => r.shortfall),
       totalConversions: sum((r) => r.conversion),
+      totalConversionTax: sum((r) => r.conversionTax),
       firstDeathYear, lastDeathYear, youDeathYear: you.deathYear, spouseDeathYear: sp ? sp.deathYear : null,
       people: { you: personSummary(you), spouse: sp ? personSummary(sp) : null },
       // Your FERS annuity and supplement (null unless you are a federal employee); people.<person>.fers / .otherPension
@@ -2104,6 +2136,24 @@
         add('warn', 'tspRollWorking', `Money moves from ${n.your} ${n.plan} to an IRA in ${hit.year}, while ${n.who} still work${n.s} and ${n.are} under 59½. The plan allows that only after separating (or from 59½); an in-plan conversion to Roth is allowed any time.`);
       }
     }
+    // A conversion or transfer into an account assumed to earn more than the one it leaves: the moved money then grows
+    // faster because of the return inputs, not because of the move.
+    for (const w of inp.taxes.conversionsAndTransfers) {
+      const p = w.owner === 'spouse' ? sp : you, mv = findMove(w);
+      if (!p || !mv || W.some((x) => x.code === 'moveReturnGap')) continue;
+      const hit = years.find((r) => r.year - p.by >= w.fromAge && r.year - p.by <= w.throughAge && r.moves[mv.key] > 0.5);
+      if (!hit) continue;
+      const n = N(p), phase = hit.year < p.retireYear ? 'beforeRetirement' : 'afterRetirement';
+      const acct = (a) => ({ traditionalWorkplace: [`traditional ${n.plan}`, inp.workplacePlans[p.key].returns], rothWorkplace: [`Roth ${n.plan}`, inp.workplacePlans[p.key].returns],
+        traditionalIra: ['traditional IRA', inp.iras[p.key].traditional.returns], rothIra: ['Roth IRA', inp.iras[p.key].roth.returns] }[a]);
+      const [fromName, fromR] = acct(w.fromAccount), [toName, toR] = acct(w.toAccount);
+      if (toR[phase] > fromR[phase] + 1e-9) {
+        add('info', 'moveReturnGap', `${isConversion(w) ? 'A Roth conversion' : 'A transfer'} moves money from ${n.your} ${fromName} to ${n.your} ${toName} (first in ${hit.year}), ` +
+          `which is assumed to earn ${pctTxt(toR[phase])} ${phase === 'afterRetirement' ? 'after' : 'before'} retirement instead of ${pctTxt(fromR[phase])}. Part of the ${toName}'s ` +
+          `growth comes from that difference in the return inputs, not from the move. That fits riskier investments in the ${toName} (with a higher volatility to match); ` +
+          `if both accounts are invested the same way, give them the same return.`);
+      }
+    }
     // RMD pushes into a higher bracket or IRMAA tier
     const rmdRows = years.filter((r) => r.rmd > 0);
     if (rmdRows.length) {
@@ -2132,7 +2182,8 @@
     if (irmaaAny && !W.some((w) => w.code === 'rmdIrmaa')) {
       const yrs = years.filter((r) => r.irmaaCost > 0.5).length;
       add('warn', 'irmaa', `Income crosses a Medicare IRMAA tier: Part B surcharges start in ${irmaaAny.year} (tier ${irmaaAny.irmaaTier}, ${usd(irmaaAny.irmaaCost)} extra that year) ` +
-        `and total ${usd(S.lifetimeIrmaa)} over ${yrs} year(s) (future dollars).`);
+        `and total ${usd(S.lifetimeIrmaa)} over ${yrs} year(s) (future dollars)` +
+        (S.lifetimeIrmaaFromConversions > 0.5 ? `; ${usd(S.lifetimeIrmaaFromConversions)} of it is caused by Roth conversions.` : '.'));
     }
     if (S.depletionYear !== null) {
       add('danger', 'depleted', `Portfolio is depleted in ${S.depletionYear} (your age ${S.depletionAge}). Unfunded spending through the plan end totals ${usd(S.totalShortfall)} (future dollars).`);
