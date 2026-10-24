@@ -48,8 +48,8 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
    cumulative inflation to the start of *Y*; end-of-year balances to the end of *Y*. A figure that belongs to one
    future year (an annuity or supplement when it starts, a High-3) says which dollars it is in.
 3. **Scenarios.** Name the plan and **Save** (stored in this browser's `localStorage`). **Duplicate**, **Delete**,
-   and load saved plans from the dropdown. **Compare with (B)** overlays a saved scenario's portfolio balance on the
-   current inputs (A). **Export/Import JSON** moves scenarios between machines; the file is laid out like the input
+   and load saved plans from the dropdown (**Compare scenarios** below puts saved plans side by side). **Export/Import
+   JSON** moves scenarios between machines; the file is laid out like the input
    panels (see "Plan file" below), so it can be edited by hand or by an AI assistant and imported back. Importing lists
    any setting that was ignored, missing or not allowed. The URL hash always encodes the
    current inputs (as a diff from the defaults), so **Copy link** reproduces the scenario anywhere. A link may not
@@ -57,7 +57,8 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
    working inputs are also autosaved and restored on reload.
 4. **Monte Carlo.** Enable it in its panel and press **Run Monte Carlo**. It runs in a Web Worker (built from the
    engine's own source, so it works from `file://`) and falls back to the main thread if workers are blocked.
-   It does not rerun automatically on input changes; a "stale" badge appears instead. Every run computes both
+   It does not rerun automatically on input changes; a "stale" badge appears instead, and the Monte Carlo card offers
+   the same run button it shows before the first run (hidden while a run is in progress). Every run computes both
    lifespan modes, fixed and stochastic, and shows them side by side. The household's "Lifespans in Monte Carlo"
    setting picks which one drives the fan chart and the headline card.
 5. **Year-by-year table** has a sticky header and first column, scrolls horizontally, and **Export CSV** writes the
@@ -121,7 +122,7 @@ Chart.js from cdnjs; without it everything else (cards, warnings, timeline, tabl
   today's dollars when viewing future dollars); checking & money market (money kept in and spent from each, moved to brokerage above the limit, their balances and
   the limit, with a tooltip explaining where each year's surplus came from); federal tax and each state, local or foreign tax, with the marginal bracket in the tooltip; withdrawal rate with a 4%
   reference; SS claim-age comparison (62 / 67 / 70, one panel per spouse, break-even ages labeled); Monte Carlo fan
-  chart (10–90th and 25–75th percentile bands, median, deterministic path); scenario A vs B. Legends are HTML
+  chart (10–90th and 25–75th percentile bands, median, deterministic path). Legends are HTML
   buttons that toggle series. The palette is colorblind-validated; lines use dash patterns as a second cue.
 
 ## Default household

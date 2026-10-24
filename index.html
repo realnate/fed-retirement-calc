@@ -341,10 +341,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
         <button type="button" class="btn small" id="scDup">Duplicate</button>
         <button type="button" class="btn small" id="scDel">Delete</button>
       </div>
-      <div class="row">
-        <label for="scCompare">Compare with (B)</label>
-        <select class="sel" id="scCompare"></select>
-      </div>
       <div class="row btnrow">
         <button type="button" class="btn small" id="scExport">Export JSON</button>
         <button type="button" class="btn small" id="scImport">Import JSON</button>
@@ -430,12 +426,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
         <ul class="legend" id="lg-mc"></ul>
         <div class="chart-box tall" id="mcBox"><canvas id="ch-mc" role="img" aria-label="Fan chart of portfolio balance percentiles across Monte Carlo runs."></canvas></div>
         <div class="table-wrap mc-wrap" id="mcTable" tabindex="0" role="region" aria-label="Monte Carlo results by lifespan mode"></div>
-      </section>
-      <section class="sec wide" aria-labelledby="c7H">
-        <h2 id="c7H">Scenario A vs B</h2>
-        <p class="desc" id="cmpDesc">Total portfolio balance of the current inputs (A) against a saved scenario (B).</p>
-        <ul class="legend" id="lg-cmp"></ul>
-        <div class="chart-box" id="cmpBox"><canvas id="ch-cmp" role="img" aria-label="Line chart comparing total portfolio balance of scenario A and scenario B."></canvas></div>
       </section>
     </div>
 
@@ -608,8 +598,8 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     return d;
   };
   const state = {
-    inputs: null, result: null, basis: 'real', scenarioName: 'My plan', compareName: '',
-    compareResult: null, fxShock: null, mc: null, mcStale: false, mcRunning: false,
+    inputs: null, result: null, basis: 'real', scenarioName: 'My plan',
+    fxShock: null, mc: null, mcStale: false, mcRunning: false,
     charts: {}, hidden: {}, fieldEls: [], infoEls: {}, person: 'you', switches: [],
     cmpSel: new Set(['__current__']), comparison: null, cmpRunning: false, cmpStale: false,
     tools: { spending: null, retire: null, optimize: null, sensitivity: null }, toolsStale: {}, toolRunning: null,
@@ -1239,11 +1229,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     if (inp.spending.foreignCurrency.enabled) {
       state.fxShock = { up: RE.simulate(inp, { fxMult: 1.2, lite: true }).summary, down: RE.simulate(inp, { fxMult: 0.8, lite: true }).summary };
     }
-    state.compareResult = null;
-    if (state.compareName) {
-      const sc = LS.get(KEY.scenarios, {})[state.compareName];
-      if (sc) { try { state.compareResult = RE.simulate(sc.inputs, { lite: true }); } catch (e) { console.error(e); } }
-    }
     renderAll();
     LS.set(KEY.working, { name: state.scenarioName, inputs: inp });
     writeHash();
@@ -1470,6 +1455,7 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
       ${c.extra || ''}
     </div>`;
   }
+  const mcRunBtn = (label) => (state.mcRunning ? '' : `<button type="button" class="btn small primary" data-mc-run style="margin-top:6px;align-self:flex-start">${label}</button>`);
   function renderCards(res) {
     const S = res.summary, inp = state.inputs;
     const retAge = inp.employment.you.retirementAge, pw = plansWord(inp);
@@ -1505,12 +1491,14 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
         sub: S.bridgeEndYear > S.bridgeStartYear ? `${S.bridgeStartYear}–${S.bridgeEndYear - 1}, retirement → ${inp.household.married ? 'both SS claims' : 'SS claim'}; net portfolio draw ${money(sumBasis(res, null, (r) => r.year >= S.bridgeStartYear && r.year < S.bridgeEndYear, (r) => r.netWithdrawal))}` : 'No gap: Social Security starts by retirement' },
     ];
     if (!inp.monteCarlo.enabled) cards.push({ label: 'Monte Carlo success', value: 'Off', statusText: 'Enable in the Monte Carlo panel', status: 'neutral' });
-    else if (!mc) cards.push({ label: 'Monte Carlo success', value: state.mcRunning ? 'Running…' : 'Not run', status: 'neutral', statusText: 'Run on demand', extra: '<button type="button" class="btn small primary" data-mc-run style="margin-top:6px;align-self:flex-start">Run Monte Carlo</button>' });
+    else if (!mc) cards.push({ label: 'Monte Carlo success', value: state.mcRunning ? 'Running…' : 'Not run', status: 'neutral',
+      statusText: state.mcRunning ? 'Running in the background' : 'Run on demand', extra: mcRunBtn('Run Monte Carlo') });
     else {
       const s = mc.successRate, st = s >= 0.85 ? 'good' : s >= 0.7 ? 'warning' : 'critical';
       const other = state.mc[mc.mode === 'fixed' ? 'stochastic' : 'fixed'];
       cards.push({ label: 'Monte Carlo success', value: NF.pct0.format(s), status: st,
-        statusText: (st === 'good' ? 'Strong' : st === 'warning' ? 'Moderate' : 'At risk') + (state.mcStale ? ' · stale, re-run' : ''),
+        statusText: (st === 'good' ? 'Strong' : st === 'warning' ? 'Moderate' : 'At risk') + (state.mcStale ? ' · stale: inputs changed' : ''),
+        extra: state.mcStale ? mcRunBtn('Re-run Monte Carlo') : '',
         sub: `<span class="ln">${mc.mode === 'fixed' ? 'Fixed lifespans' : 'Stochastic mortality'}: ${NF.int.format(mc.runs - mc.failures)} of ${NF.int.format(mc.runs)} never depleted</span><span class="ln">${other.mode === 'fixed' ? 'Fixed lifespans' : 'Stochastic mortality'}: ${NF.pct0.format(other.successRate)}</span>` });;
     }
     $('#cards').innerHTML = cards.map(card).join('');
@@ -1900,7 +1888,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
 
     renderSsCharts(P);
     renderMcChart(P);
-    renderCompareChart(P);
     if (state.tools && state.tools.sensitivity) renderSens();
   }
 
@@ -2032,35 +2019,6 @@ footer .disc { border-top: 1px solid var(--border); padding-top: 14px; }
     host.innerHTML = `<table class="mc-table"><thead><tr><th scope="col">Metric</th>${th('fixed', 'Fixed lifespans')}${th('stochastic', 'Stochastic mortality')}</tr></thead><tbody>` +
       R.map(([label, f]) => `<tr><th scope="row">${esc(label)}</th><td${sel === 'fixed' ? ' class="sel"' : ''}>${f(F)}</td><td${sel === 'stochastic' ? ' class="sel"' : ''}>${f(St)}</td></tr>`).join('') +
       '</tbody></table>';
-  }
-
-  function renderCompareChart(P) {
-    const box = $('#cmpBox');
-    const B = state.compareResult;
-    if (!B) {
-      if (state.charts['ch-cmp']) { state.charts['ch-cmp'].destroy(); delete state.charts['ch-cmp']; }
-      box.innerHTML = `<div class="placeholder">Save a scenario, then pick it under “Compare with (B)” in the scenario bar.</div>`;
-      $('#lg-cmp').innerHTML = '';
-      $('#cmpDesc').textContent = 'Total portfolio balance of the current inputs (A) against a saved scenario (B).';
-      return;
-    }
-    if (!$('#ch-cmp')) box.innerHTML = '<canvas id="ch-cmp" role="img" aria-label="Line chart comparing total portfolio balance of scenario A and scenario B."></canvas>';
-    const A = state.result;
-    const y0 = Math.min(A.years[0].year, B.years[0].year);
-    const y1 = Math.max(A.years[A.years.length - 1].year, B.years[B.years.length - 1].year);
-    const labels = []; for (let y = y0; y <= y1; y++) labels.push(y);
-    const line = (res) => labels.map((y) => { const r = res.years.find((x) => x.year === y); return r ? dv(r, r.total, 'bal') : null; });
-    const sets = [
-      { type: 'line', label: 'A: current inputs', data: line(A), borderColor: P.s1, backgroundColor: P.s1, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, _kind: 'line', _group: 'A' },
-      { type: 'line', label: `B: ${state.compareName}`, data: line(B), borderColor: P.s2, backgroundColor: P.s2, borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, _kind: 'line', _group: 'B' },
-    ];
-    upsertChart('ch-cmp', { type: 'line', data: { labels, datasets: sets }, options: baseOptions(P, {
-      plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${money(c.raw)}` } } },
-    }) });
-    renderLegend('lg-cmp', ['ch-cmp'], sets);
-    const sa = A.summary, sb = B.summary;
-    const d = (s) => (s.depletionYear === null ? 'never depleted' : `depleted at ${s.depletionAge}`);
-    $('#cmpDesc').textContent = `A ends with ${money(state.basis === 'real' ? sa.endingBalanceReal : sa.endingBalance)} (${d(sa)}); B ends with ${money(state.basis === 'real' ? sb.endingBalanceReal : sb.endingBalance)} (${d(sb)}), ${basisWord()}.`;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -2617,11 +2575,6 @@ self.onmessage = (e) => {
     load.innerHTML = '';
     load.append(h('option', { value: '' }, names.length ? 'Load a saved scenario…' : 'No saved scenarios'));
     for (const n of names) load.append(h('option', { value: n }, n));
-    const cmp = $('#scCompare');
-    cmp.innerHTML = '';
-    cmp.append(h('option', { value: '' }, 'None'));
-    for (const n of names) cmp.append(h('option', { value: n, selected: n === state.compareName }, n));
-    if (state.compareName && !all[state.compareName]) state.compareName = '';
     renderCmpPick();
   }
   function setInputs(inputs, name) {
@@ -2653,7 +2606,6 @@ self.onmessage = (e) => {
       if (!all[name]) { toast('Pick a saved scenario to delete'); return; }
       if (!confirm(`Delete saved scenario “${name}”?`)) return;
       delete all[name]; LS.set(KEY.scenarios, all);
-      if (state.compareName === name) state.compareName = '';
       refreshScenarioLists(); recalc(); toast(`Deleted “${name}”`);
     });
     $('#scLoad').addEventListener('change', (e) => {
@@ -2662,7 +2614,6 @@ self.onmessage = (e) => {
       if (sc) { setInputs(sc.inputs, name); toast(`Loaded “${name}”`); }
       e.target.value = '';
     });
-    $('#scCompare').addEventListener('change', (e) => { state.compareName = e.target.value; recalc(); });
     $('#scExport').addEventListener('click', () => download(`${slug(state.scenarioName)}.json`, planFileText(), 'application/json'));
     $('#scImport').addEventListener('click', () => $('#scFile').click());
     $('#scFile').addEventListener('change', (e) => {
